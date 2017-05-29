@@ -50,9 +50,10 @@ Most configuration is copied from [multibootusb], with changes to support the IS
 
 TODO: Instructions on how to automatically customize the Arch installation.
 
-# Licensing
+## Licensing
 
-As portions of this project are heavily based off [multiboot] which is under the [GPLv3], this project is also licensed under [GPLv3].
+As portions of this project are heavily based off [multibootusb] which is under the [GPLv3], this project is also licensed under [GPLv3].
 
 [multibootusb]: https://github.com/aguslr/multibootusb
 [GPLv3]: https://www.gnu.org/licenses/quick-guide-gplv3.en.html
+[QEMU]: http://www.qemu.org/
