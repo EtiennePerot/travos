@@ -24,22 +24,64 @@ cleanup() {
 }
 trap cleanup ERR
 
-if [ "$#" -lt 1 ]; then
-	echo "QEMU usage: $0 --test" >&2
-	echo "Real usage: $0 /dev/sdX" >&2
-	echo "Real+QEMU usage: $0 --test /dev/sdX" >&2
+tempDir="$(umask 077 && mktemp -d)"
+cleanup::tempDir() {
+	rm -rf --one-file-system "$tempDir"
+}
+cleanupTasks+=(cleanup::tempDir)
+
+msg() {
+	echo ">> $@" >&2
+}
+
+usage() {
+	echo "        QEMU usage: $0 --config=my-config.cfg --test" >&2
+	echo "        Real usage: $0 --config=my-config.cfg /dev/sdX" >&2
+	echo "   Real+QEMU usage: $0 --config=my-config.cfg --test /dev/sdX" >&2
+	echo '' >&2
+	echo '   Other options:' >&2
+	echo '     --assume-formatted     If set, do not recreate partitions on the device.' >&2
+	echo '     --skip-verification    If set, downloaded images are not verified for integrity.' >&2
 	cleanup 1
-fi
+}
+
 device=''
 isTest='false'
+skipImageVerification='false'
+assumeFormatted='false'
+configFile=''
+nextArgIsConfigFile='false'
 for arg; do
-	if [ "$arg" == --test -o "$arg" == -test ]; then
+	if [ "$nextArgIsConfigFile" == 'true' ]; then
+		configFile="$arg"
+		nextArgIsConfigFile='false'
+	elif [ "$arg" == --test -o "$arg" == -test ]; then
 		isTest='true'
+	elif [ "$arg" == --config -o "$arg" == -config ]; then
+		nextArgIsConfigFile='true'
+	elif echo "$arg" | grep -qiP '^--?config=.+$'; then
+		configFile="$(echo "$arg" | cut -d'=' -f2-)"
+	elif [ "$arg" == --skip-verification -o "$arg" == -skip-verification ]; then
+		skipImageVerification='true'
+	elif [ "$arg" == --assume-formatted -o "$arg" == -assume-formatted ]; then
+		assumeFormatted='true'
 	else
 		device="$arg"
 	fi
 done
+if [ -z "$configFile" ]; then
+	msg 'Must specify a config file with --config.'
+	usage
+fi
+if [ ! -f "$configFile" ]; then
+	msg "Config file '$configFile' does not exist or is not a file."
+	usage
+fi
 if [ "$isTest" == 'true' -a -z "$device" ]; then
+	if [ "$assumeFormatted" == 'true' ]; then
+		msg '--assume-formatted is incompatible with local testing mode.'
+		usage
+	fi
 	testScratchImage="$scratchDir/test.img"
 	rm -f "$testScratchImage"
 	truncate -s 128G "$testScratchImage"
@@ -60,15 +102,41 @@ else
 	homePartition="${device}4"
 fi
 if [ -z "$device" ]; then
-	echo 'Must specify device as /dev/sdX' >&2
-	exit 1
+	msg 'Must specify device as /dev/sdX'
+	usage
 fi
 if [ ! -e "$device" ]; then
-	echo "Device '$device' does not exist." >&2
-	exit 1
+	msg "Device '$device' does not exist."
+	usage
+fi
+refreshPartitions() {
+	sudo partprobe "$device"
+}
+refreshPartitions
+
+msg "Reading configuration '$configFile'..."
+LUKS_PASSWORD=''
+LUKS_KEYFILE=''
+PROVISIONING_DIR=''
+source "$configFile"
+if [ -z "$LUKS_PASSWORD" -a -z "$LUKS_KEYFILE" ]; then
+	msg 'Config file must specify at least one of LUKS_PASSWORD, LUKS_KEYFILE.'
+	cleanup 1
+fi
+if [ -n "$LUKS_KEYFILE" -a ! -f "$LUKS_KEYFILE" ]; then
+	msg "LUKS_KEYFILE '$LUKS_KEYFILE' does not exist or is not a file."
+	cleanup 1
+fi
+if [ -z "$PROVISIONING_DIR" ]; then
+	msg "Config file must specify PROVISIONING_DIR."
+	cleanup 1
+fi
+if [ ! -d "$PROVISIONING_DIR" ]; then
+	msg "PROVISIONING_DIR '$PROVISIONING_DIR' does not exist or is not a directory."
+	cleanup 1
 fi
 
-echo 'Fetching image files...' >&2
+msg 'Fetching image files...'
 imagesDir="$scratchDir/images"
 mkdir -p "$imagesDir"
 # Syntax: 'URL|TARGET_DIRECTORY|VERIFICATION_FUNCTION|VERIFICATION_FUNCTION_ARGUMENTS'
@@ -127,18 +195,26 @@ for imageData in "${images[@]}"; do
 			imageVerificationFunctionAllArgs=''
 		fi
 	done
-	echo "Grabbing and verifying image '$imageFilename'..." >&2
+	msg "Grabbing and verifying image '$imageFilename'..."
 	while [ "$imageOK" != 'true' ]; do
 		while [ ! -f "$imageFile" ]; do
 			wget -qO "$imageFile" "$imageURL"
 		done
+		if [ "$skipImageVerification" == 'true' ]; then
+			imageOK='true'
+			continue
+		fi
 		if "$imageVerificationFunction" "$imageFile" "${imageVerificationFunctionArgs[@]}"; then
 			imageOK='true'
 		else
 			rm "$imageFile"
 		fi
 	done
-	echo "Image verified: '$imageFilename'." >&2
+	if [ "$skipImageVerification" == 'true' ]; then
+		msg "Image verification skipped: '$imageFilename'."
+	else
+		msg "Image verified: '$imageFilename'."
+	fi
 done
 
 # Partition 1: MSDOS boot, 32M,  fat32, ID B007-0D05 "boot dos"
@@ -149,39 +225,34 @@ bootDOSID='B0070D05'     # As specified to mkfs.fat32
 bootDOSUUID='B007-0D05'  # As listed in /dev/disk/by-uuid.
 bootEFIID='B0070EF1'     # As specified to mkfs.fat32
 bootEFIUUID='B007-0EF1'  # As listed in /dev/disk/by-uuid.
-archUUID='a5c8a5c8-a5c8-a5c8-a5c8-a5c8a5c8a5c8'
-homeUUID='803e803e-803e-803e-803e-803e803e803e'
+archLUKSUUID='0075a105-1035-a5c8-0000-deadbeefcafe'
+archRealUUID='0075a105-5ea1-a5c8-0000-deadbeefcafe'
+homeLUKSUUID='0075a105-1035-803e-0000-deadbeefcafe'
+homeRealUUID='0075a105-5ea1-803e-0000-deadbeefcafe'
 
-echo 'Creating new partitions...' >&2
+ifNotFormatted() {
+	if [ "$assumeFormatted" == 'false' ]; then
+		"$@"
+	fi
+}
+ifNotFormatted msg 'Creating new partitions...'
 # Typecode EF02 is from https://www.gnu.org/software/grub/manual/html_node/BIOS-installation.html
-sudo sgdisk --clear                       \
+ifNotFormatted sudo sgdisk --clear           \
 	--new=1:1M:2M   --typecode=1:EF02 \
 	--new=2:4M:8G   --typecode=2:EF00 \
 	--new=3:9G:60G  --typecode=3:8300 \
 	--largest-new=4 --typecode=4:8300 \
 	--hybrid=1,2,3                    \
 	--attributes=1:set:2              \
-	--print "$device"
-sudo partprobe "$device"
-echo 'Creating filesystems...' >&2
-sudo mkfs.vfat -i   "$bootDOSID"                       "$bootDOSPartition" 2>/dev/null
-sudo mkfs.vfat -i   "$bootEFIID"                       "$bootEFIPartition" 2>/dev/null
-sudo mkfs.ext4 -qFU "$archUUID" -O '^has_journal'      "$archPartition"    2>/dev/null
-sudo mkfs.ext4 -qFU "$homeUUID" -O '^has_journal' -m 0 "$homePartition"    2>/dev/null
-sudo partprobe "$device"
+	"$device" 2>/dev/null
+ifNotFormatted refreshPartitions
+ifNotFormatted msg 'Creating filesystems...'
+ifNotFormatted sudo mkfs.vfat -i "$bootDOSID" "$bootDOSPartition" &>/dev/null
+ifNotFormatted sudo mkfs.vfat -i "$bootEFIID" "$bootEFIPartition" &>/dev/null
+ifNotFormatted refreshPartitions
 bootEFIDevice="/dev/disk/by-uuid/$bootEFIUUID"
-archDevice="/dev/disk/by-uuid/$archUUID"
-homeDevice="/dev/disk/by-uuid/$homeUUID"
 if [ ! -e "$bootEFIDevice" ]; then
-	echo "Cannot find boot EFI device '$bootEFIDevice'." >&2
-	cleanup 1
-fi
-if [ ! -e "$archDevice" ]; then
-	echo "Cannot find boot device '$archDevice'." >&2
-	cleanup 1
-fi
-if [ ! -e "$homeDevice" ]; then
-	echo "Cannot find boot device '$homeDevice'." >&2
+	msg "Cannot find boot EFI device '$bootEFIDevice'."
 	cleanup 1
 fi
 mountpointDir="$scratchDir/mnt"
@@ -196,37 +267,93 @@ cleanup::unmount_partitions() {
 }
 cleanupTasks+=(cleanup::unmount_partitions)
 
-echo 'Preparing boot partitions...' >&2
+msg 'Preparing boot partitions...'
 sudo mount "$bootEFIDevice" "$bootEFIMountpoint"
 bootDirectory="$bootEFIMountpoint/boot"
 efiISODirectory="$bootEFIMountpoint/isos"
 efiBinDirectory="$bootEFIMountpoint/bin"
 sudo mkdir -p "$bootDirectory" "$efiISODirectory" "$efiBinDirectory"
 sudo chown root:root "$bootDirectory" "$efiISODirectory" "$efiBinDirectory"
-echo 'Installing GRUB for EFI...' >&2
-sudo grub-install --target=x86_64-efi --efi-directory="$bootEFIMountpoint" --boot-directory="$bootDirectory" --removable --recheck
-echo 'Installing GRUB for lagecy booting...' >&2
-sudo grub-install --target=i386-pc --recheck --boot-directory="$bootDirectory" --removable "$device"
-sudo partprobe "$device"
+ifNotFormatted msg 'Installing GRUB for EFI...'
+ifNotFormatted sudo grub-install --target=x86_64-efi --efi-directory="$bootEFIMountpoint" --boot-directory="$bootDirectory" --removable --recheck
+ifNotFormatted msg 'Installing GRUB for legacy booting...'
+ifNotFormatted sudo grub-install --target=i386-pc --recheck --boot-directory="$bootDirectory" --removable "$device"
+ifNotFormatted refreshPartitions
 if [ "$(cat /proc/sys/vm/dirty_background_bytes)" -eq 0 ]; then
 	# This can slow the system down a lot by dirtying pages, so apply saner values.
 	# See https://lwn.net/Articles/572911/
 	sudo bash -c 'echo $((16*1024*1024)) > /proc/sys/vm/dirty_background_bytes'
 	sudo bash -c 'echo $((48*1024*1024)) > /proc/sys/vm/dirty_bytes'
 fi
-echo 'Copying live Linux images...' >&2
+msg 'Copying live Linux images...'
 sudo cp -r "$scriptDir/boot"/* "$bootDirectory/"
-sudo rsync -h --inplace --progress --bwlimit=16M "$imagesDir"/*.iso "$efiISODirectory/"
+for sourceISOFile in "$imagesDir"/*.iso; do
+	targetISOFile="$efiISODirectory/$(basename "$sourceISOFile")"
+	if [ -f "$targetISOFile" ]; then
+		msg "Existing ISO '$(basename "$sourceISOFile")' detected, syncing..."
+		sudo rsync -cth --inplace --progress "$sourceISOFile" "$targetISOFile"
+	else
+		sudo rsync -th --inplace --progress --bwlimit=16M "$sourceISOFile" "$targetISOFile"
+	fi
+done
 sudo chown -R root:root "$efiISODirectory" "$efiBinDirectory"
 sudo umount -l "$bootEFIMountpoint"
 sudo sync
 
+msg 'Preparing Arch partitions...'
+tempLUKSKeyFile1="$tempDir/luks1.key"
+tempLUKSKeyFile2="$tempDir/luks2.key"
+touch "$tempLUKSKeyFile1" "$tempLUKSKeyFile2"
+cleanup::tempLUKSKeyFiles() {
+	rm -f "$tempLUKSKeyFile1" "$tempLUKSKeyFile2"
+}
+cleanupTasks+=(cleanup::tempLUKSKeyFiles)
+chmod 600 "$tempLUKSKeyFile1" "$tempLUKSKeyFile2"
+if [ -z "$LUKS_KEYFILE" ]; then
+	echo -n "$LUKS_PASSWORD" > "$tempLUKSKeyFile1"
+else
+	cat "$LUKS_KEYFILE" > "$tempLUKSKeyFile1"
+fi
+luksFormat() {
+	# Usage: luksFormat <UUID> <device>
+	sudo cryptsetup luksFormat --batch-mode --key-file="$tempLUKSKeyFile1" --use-random --cipher aes-xts-plain64 --key-size 512 --hash sha512 --iter-time 5000 --uuid="$1" "$2"
+	if [ -n "$LUKS_KEYFILE" -a -n "$LUKS_PASSWORD" ]; then
+		echo -n "$LUKS_PASSWORD" > "$tempLUKSKeyFile2"
+		sudo cryptsetup luksAddKey --batch-mode --key-file="$tempLUKSKeyFile1" --iter-time 5000 "$2" "$tempLUKSKeyFile2"
+	fi
+	refreshPartitions
+}
+ifNotFormatted luksFormat "$archLUKSUUID" "$archPartition"
+ifNotFormatted luksFormat "$homeLUKSUUID" "$homePartition"
+archLUKSDevice="/dev/disk/by-uuid/$archLUKSUUID"
+homeLUKSDevice="/dev/disk/by-uuid/$homeLUKSUUID"
+if [ ! -e "$archLUKSDevice" ]; then
+	msg "Cannot find arch device '$archLUKSDevice'."
+	cleanup 1
+fi
+if [ ! -e "$homeLUKSDevice" ]; then
+	msg "Cannot find home device '$homeLUKSDevice'."
+	cleanup 1
+fi
+cleanup::closeLUKS() {
+	sudo cryptsetup luksClose travos-arch || true
+	sudo cryptsetup luksClose travos-home || true
+}
+cleanupTasks+=(cleanup::closeLUKS)
+sudo cryptsetup open --key-file="$tempLUKSKeyFile1" "$archPartition" travos-arch
+sudo cryptsetup open --key-file="$tempLUKSKeyFile1" "$homePartition" travos-home
+archMappedPartition='/dev/mapper/travos-arch'
+homeMappedPartition='/dev/mapper/travos-home'
+ifNotFormatted sudo mkfs.ext4 -qFU "$archRealUUID" -O '^has_journal'      "$archMappedPartition" 2>/dev/null
+ifNotFormatted sudo mkfs.ext4 -qFU "$homeRealUUID" -O '^has_journal' -m 0 "$homeMappedPartition" 2>/dev/null
+ifNotFormatted refreshPartitions
+
 qemu::launch() {
-	sudo qemu-system-x86_64 -enable-kvm -localtime -m 4G -vga std -drive file="$device",cache=none,format=raw,if=virtio "$@"
+	sudo qemu-system-x86_64 -enable-kvm -localtime -m 4G -vga std -drive file="$device",cache=none,format=raw,if=virtio "$@" 2>&1 | grep --line-buffered -vP '^$|Gtk-WARNING'
 }
 
 if [ "$isTest" == 'true' ]; then
-	echo 'Launching QEMU...' >&2
+	msg 'Launching QEMU...'
 	qemu::launch
 fi
 cleanup 0

@@ -4,22 +4,22 @@ OS for traveling. Meant to be installed on a USB key of size at least 128GB.
 
 ## Usage
 
-Where `/dev/sdX` is your USB stick (WARNING: This will **erase all data** on `/dev/sdX`):
+Where `/dev/sdX` is your USB stick (WARNING: This will **erase all data** on `/dev/sdX`), and `my-config.cfg` as your configuration file (see `example.cfg` for details):
 
 ```bash
-$ ./travos.sh /dev/sdX
+$ ./travos.sh --config=my-config.cfg /dev/sdX
 ```
 
 If you don't have a USB stick, you can use `--test` to create a temporary image file and run [QEMU] on it:
 
 ```bash
-$ ./travos.sh --test
+$ ./travos.sh --config=my-config.cfg --test
 ```
 
 Or you can use both to write the image to the USB key *and* start it with [QEMU]:
 
 ```bash
-$ ./travos.sh --test /dev/sdX
+$ ./travos.sh --config=my-config.cfg --test /dev/sdX
 ```
 
 ## Partition scheme
@@ -31,8 +31,8 @@ In order to boot on as many computers as possible, the USB is formatted with a [
     * `/boot`: GRUB configuration and installation files, as copied from this repo's `/grub` directory.
     * `/isos`: ISO images for various live Linux distros.
     * `/bin`: Empty and unused; mostly just there to match `multibootusb`.
-* Partition 3, 48 GB: LUKS+ext4 Arch Linux root partition. (UUID: `a5c8a5c8-a5c8-a5c8-a5c8-a5c8a5c8a5c8`, "arch"). Not yet implemented.
-* Partition 4, rest of space: LUKS+ext4 home partition. (UUID: `803e803e-803e-803e-803e-803e803e803e`, "home"). Not yet implemented.
+* Partition 3, 48 GB: LUKS+ext4 Arch Linux root partition. (UUID: `0075a105-1035-a5c8-0000-deadbeefcafe`, "travos luks arch"). Not yet implemented.
+* Partition 4, rest of space: LUKS+ext4 home partition. (UUID: `0075a105-1035-803e-0000-deadbeefcafe`, "travos luks home"). Not yet implemented.
 
 Partitions 1-3 are meant to be expendable and completely recreatable from this repository. Partition 4 is meant to be carried over from key to key.
 
