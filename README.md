@@ -1,6 +1,16 @@
 # travos - Travel OS
 
-OS for traveling. Meant to be installed on a USB key of size at least 128GB.
+OS for traveling. Meant to be installed on a USB key of size at least 96 GB.
+
+## Features
+
+* Boot on multiple live Linux distributions from a single USB stick:
+    * [Tails](https://tails.boum.org/). Current version: `2.12`
+    * [Kali Linux](https://www.kali.org/). Current version: `2017.1`
+    * [System Rescue CD](https://www.system-rescue-cd.org/). Current version: `5.01`
+* Boot onto a persistent, LUKS-encrypted Arch installation from that same USB stick.
+* Chainload to on-disk operating system.
+* Memtest86+.
 
 ## Usage
 
@@ -40,15 +50,38 @@ Partitions 1-3 are meant to be expendable and completely recreatable from this r
 
 Most configuration is copied from [multibootusb], with changes to support the ISO images being on the EFI partition rather than the "data" one. This change is such that we save one partition.
 
-## Supported live Linux distributions
-
-* [Kali Linux](https://www.kali.org/). Current version: `2017.1`
-* [System Rescue CD](https://www.system-rescue-cd.org/). Current version: `5.01`
-* [Tails](https://tails.boum.org/). Current version: `2.12`
-
 ## Arch provisioning
 
 TODO: Instructions on how to automatically customize the Arch installation.
+
+## Recommended USB key
+
+*The links below contain an affiliate code.*
+
+<div align="center">
+	<p>
+		<a href="http://amzn.to/2rzfWzI">
+			<img src="https://github.com/EtiennePerot/travos/blob/master/res/aegis.png?raw=true" alt="Apricon Aegis 120GB USB3 key"/>
+		</a><br/>
+		<strong>Recommended USB key</strong>:<br/>
+		<a href="http://amzn.to/2rzfWzI">Apricorn Aegis 120GB USB3 key</a>
+	</p>
+</div>
+
+### Features
+
+* USB 3
+* 256-bit AES XTS onboard hardware encryption
+* Wear-resistant hardware unlock keypad (no keylogging possible)
+* Multiple 16-digit PINs
+* [Duress PIN](https://en.wikipedia.org/wiki/Duress_code)
+* Firmware-enforced read-only mode
+* Self-destructs after too many unlock failures
+* Auto-locks after inactivity
+* Water-resistant
+* Epoxy-sealed
+
+[Manufacturer's page](https://www.apricorn.com/homepage-comparison/aegis-secure-key-3)
 
 ## Licensing
 
