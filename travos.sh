@@ -22,7 +22,11 @@ cleanup() {
 		exit "$1"
 	fi
 }
-trap cleanup ERR
+unexpected_cleanup() {
+	msg 'Unexpected error occurred. Performing cleanup.' >&2 || true
+	cleanup 2
+}
+trap unexpected_cleanup ERR
 
 tempDir="$(umask 077 && mktemp -d)"
 cleanup::tempDir() {
@@ -40,6 +44,7 @@ usage() {
 	echo "   Real+QEMU usage: $0 --config=my-config.cfg --test /dev/sdX" >&2
 	echo '' >&2
 	echo '   Other options:' >&2
+	echo '     --debug                Set Bash -x option (print all commands as they run).' >&2
 	echo '     --assume-formatted     If set, do not recreate partitions on the device.' >&2
 	echo '     --skip-verification    If set, downloaded images are not verified for integrity.' >&2
 	cleanup 1
@@ -61,6 +66,8 @@ for arg; do
 		nextArgIsConfigFile='true'
 	elif echo "$arg" | grep -qiP '^--?config=.+$'; then
 		configFile="$(echo "$arg" | cut -d'=' -f2-)"
+	elif [ "$arg" == --debug -o "$arg" == -debug ]; then
+		set -x
 	elif [ "$arg" == --skip-verification -o "$arg" == -skip-verification ]; then
 		skipImageVerification='true'
 	elif [ "$arg" == --assume-formatted -o "$arg" == -assume-formatted ]; then
@@ -290,8 +297,12 @@ sudo cp -r "$scriptDir/boot"/* "$bootDirectory/"
 for sourceISOFile in "$imagesDir"/*.iso; do
 	targetISOFile="$efiISODirectory/$(basename "$sourceISOFile")"
 	if [ -f "$targetISOFile" ]; then
-		msg "Existing ISO '$(basename "$sourceISOFile")' detected, syncing..."
-		sudo rsync -cth --inplace --progress "$sourceISOFile" "$targetISOFile"
+		if [ "$skipImageVerification" == 'true' ]; then
+			msg "Existing ISO '$(basename "$sourceISOFile")' detected, but image verification is off; assuming image is correct."
+		else
+			msg "Existing ISO '$(basename "$sourceISOFile")' detected, syncing..."
+			sudo rsync -cth --inplace --progress "$sourceISOFile" "$targetISOFile"
+		fi
 	else
 		sudo rsync -th --inplace --progress --bwlimit=16M "$sourceISOFile" "$targetISOFile"
 	fi
@@ -349,11 +360,12 @@ ifNotFormatted sudo mkfs.ext4 -qFU "$homeRealUUID" -O '^has_journal' -m 0 "$home
 ifNotFormatted refreshPartitions
 
 qemu::launch() {
-	sudo qemu-system-x86_64 -enable-kvm -localtime -m 4G -vga std -drive file="$device",cache=none,format=raw,if=virtio "$@" 2>&1 | grep --line-buffered -vP '^$|Gtk-WARNING'
+	sudo qemu-system-x86_64 -enable-kvm -localtime -m 4G -vga std -drive file="$device",cache=none,format=raw,if=virtio "$@" 2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
 }
 
 if [ "$isTest" == 'true' ]; then
 	msg 'Launching QEMU...'
 	qemu::launch
 fi
+msg 'All done.'
 cleanup 0
