@@ -565,7 +565,7 @@ sync
 wait
 EOF
 chmod +x "$tempDir/qemu-launch.sh"
-sudo "$tempDir/qemu-launch.sh" &
+sudo "$tempDir/qemu-launch.sh" 2>/dev/null &
 archQEMUPID=''
 for i in $(seq 1 10); do
 	sleep 1
