@@ -70,18 +70,23 @@ TODO: Instructions on how to automatically customize the Arch installation.
 
 ### Features
 
-* USB 3
-* 256-bit AES XTS onboard hardware encryption
-* Wear-resistant hardware unlock keypad (no keylogging possible)
-* Multiple 16-digit PINs
-* [Duress PIN](https://en.wikipedia.org/wiki/Duress_code)
-* Firmware-enforced read-only mode
-* Self-destructs after too many unlock failures
-* Auto-locks after inactivity
-* Water-resistant
-* Epoxy-sealed
+* USB 3: fast to boot, snappy to operate.
+* 256-bit AES XTS onboard hardware encryption: basically the same as LUKS's default `aes-xts-plain64` mode.
+* Wear-resistant hardware keypad: no PIN keyboard logging possible, and keys don't wear out revealing which ones have been touched more often.
+* Multiple 16-digit PINs: because 4-digit PINs are a joke.
+* [Duress PIN](https://en.wikipedia.org/wiki/Duress_code): Wipes the device data and PIN settings when entered, providing [plausible deniability](https://en.wikipedia.org/wiki/Plausible_deniability).
+* Firmware-enforced read-only mode: prevents untrusted computers you plug the stick into to e.g. overwrite the USB key's bootloader with a keylogged version.
+* Self-destructs after too many unlock failures: self-explanatory.
+* Auto-locks after inactivity: in case you forget it.
+* Water-resistant housing: you can keep it on your person.
+* Epoxy-sealed electronics: prevents easy access to the circuitry.
+* Onboard firmware cannot be updated: not susceptible to [BadUSB](https://srlabs.de/bites/usb-peripherals-turn/).
 
 [Manufacturer's page](https://www.apricorn.com/homepage-comparison/aegis-secure-key-3)
+
+### If it has hardware-encryption, why are some partitions LUKS-encrypted?
+
+[Defense in depth]. even if the Aegis had a backdoor PIN or static encryption key, it wouldn't be enough to get at your data partition.
 
 ## Licensing
 
@@ -90,3 +95,4 @@ As portions of this project are heavily based off [multibootusb] which is under 
 [multibootusb]: https://github.com/aguslr/multibootusb
 [GPLv3]: https://www.gnu.org/licenses/quick-guide-gplv3.en.html
 [QEMU]: http://www.qemu.org/
+[Defense in depth]: https://en.wikipedia.org/wiki/Defense_in_depth_(computing)
