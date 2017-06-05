@@ -1,0 +1,14 @@
+[Unit]
+Description=TravOS temporary bootstrapping SSH daemon
+Wants=sshdgenkeys.service
+After=sshdgenkeys.service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/sshd -D -p 2244 -o AuthorizedKeysFile=/travos/ssh_authorized_keys
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

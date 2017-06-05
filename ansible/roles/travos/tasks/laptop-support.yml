@@ -1,0 +1,46 @@
+- name: install packages
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    # Monitoring and I/O
+    - htop
+    - iotop
+    # Touchpad support
+    - xf86-input-synaptics
+    # Video drivers
+    - xf86-video-vesa
+    - xf86-video-ati
+    - xf86-video-intel
+    - xf86-video-nouveau
+    # SSD TRIMming and ionice.
+    - util-linux
+  register: install_packages
+
+- name: regular TRIMming
+  when: install_packages|succeeded
+  systemd:
+    daemon_reload: yes
+    name: fstrim.timer
+    enabled: yes
+
+- name: journald.conf.d
+  file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  register: journald_conf_d
+
+- name: volatile journald
+  when: journald_conf_d|succeeded
+  copy:
+    dest: /etc/systemd/journald.conf.d/travos-usbstick.conf
+    content: |
+      [Journal]
+      Storage=volatile
+      RuntimeMaxUse=32M
+    owner: root
+    group: root
+    mode: 0644
