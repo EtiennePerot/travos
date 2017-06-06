@@ -154,7 +154,6 @@ refreshPartitions
 msg "Reading configuration '$configFile'..."
 LUKS_PASSWORD=''
 LUKS_KEYFILE=''
-PROVISIONING_DIR=''
 PROVISIONING_PRIVATE_KEY=''
 PROVISIONING_PUBLIC_KEY=''
 ANSIBLE_ROLES_PATH=()
@@ -167,14 +166,6 @@ if [ -z "$LUKS_PASSWORD" -a -z "$LUKS_KEYFILE" ]; then
 fi
 if [ -n "$LUKS_KEYFILE" -a ! -f "$LUKS_KEYFILE" ]; then
 	msg "LUKS_KEYFILE '$LUKS_KEYFILE' does not exist or is not a file."
-	cleanup 1
-fi
-if [ -z "$PROVISIONING_DIR" ]; then
-	msg "Config file must specify PROVISIONING_DIR."
-	cleanup 1
-fi
-if [ ! -d "$PROVISIONING_DIR" ]; then
-	msg "PROVISIONING_DIR '$PROVISIONING_DIR' does not exist or is not a directory."
 	cleanup 1
 fi
 if [ -z "$PROVISIONING_PRIVATE_KEY" ]; then
