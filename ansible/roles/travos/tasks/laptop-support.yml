@@ -1,24 +1,92 @@
-- name: install packages
+- name: install packages misc
   package:
     name: "{{ item }}"
     state: latest
   with_items:
-    # Monitoring and I/O
+    - git
+    - python2
+    - python
+    - go
+    - go-tools
+    - gnupg
+    - util-linux # SSD TRIMming and ionice.
+    - strace
+    - gdb
+    - zip
+    - p7zip
+    - xz
+  register: install_packages_misc
+
+- name: install packages monitoring and io
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
     - htop
     - iotop
-    # Touchpad support
+    - hdparm
+    - lsof
+    - smartmontools
+
+- name: install packages generic laptop drivers
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
     - xf86-input-synaptics
-    # Video drivers
     - xf86-video-vesa
     - xf86-video-ati
     - xf86-video-intel
     - xf86-video-nouveau
-    # SSD TRIMming and ionice.
-    - util-linux
-  register: install_packages
+
+- name: install packages filesystems
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - dosfstools
+    - ntfs-3g
+    - btrfs-progs
+    - e2fsprogs
+    - ntfs-3g
+    - hfsprogs
+    - encfs
+    - parted
+
+- name: install packages network tools
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - net-tools
+    - openbsd-netcat
+    - iputils
+    - traceroute
+    - rsync
+    - nmap
+    - tcpdump
+    - dnsmasq
+    - hostapd
+    - openssl
+    - openvpn
+    - iptables
+    - bridge-utils
+    - aircrack-ng
+    - reaver
+
+- name: install packages multimedia
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - alsa-firmware
+    - alsa-lib
+    - alsa-utils
+    - x264
+    - ffmpeg
 
 - name: regular TRIMming
-  when: install_packages|succeeded
+  when: install_packages_misc|succeeded
   systemd:
     daemon_reload: yes
     name: fstrim.timer
@@ -44,3 +112,9 @@
     owner: root
     group: root
     mode: 0644
+
+- name: get b43 wireles firmware blobs
+  become: yes
+  become_user: travos-prov
+  aur:
+    name: b43-firmware
