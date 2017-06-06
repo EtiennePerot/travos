@@ -470,13 +470,14 @@ bootEFIMountpointWithinArch="$archMountpoint/boot-efi"
 travosDirWithinArch="$archMountpoint/travos"
 qemuEthernetMACAddress='00:75:a1:05:9e:80'
 qemuEthernetInterface='qemu0'
+travosProvisioningUser='travos-prov'
 sudo mkdir -p "$bootEFIMountpointWithinArch" "$archMountpoint/boot" "$travosDirWithinArch"
-sudo chmod 700 "$bootEFIMountpointWithinArch" "$archMountpoint/boot" "$travosDirWithinArch"
+sudo chmod 711 "$bootEFIMountpointWithinArch" "$archMountpoint/boot" "$travosDirWithinArch"
 sudo touch "$travosDirWithinArch/luks.key"
 sudo chmod 400 "$travosDirWithinArch/luks.key"
 cat "$tempLUKSKeyFile1" | sudo tee "$travosDirWithinArch/luks.key" > /dev/null
 cat "$PROVISIONING_PUBLIC_KEY" | sudo tee "$travosDirWithinArch/ssh_authorized_keys" > /dev/null
-sudo chmod 600 "$travosDirWithinArch/ssh_authorized_keys"
+sudo chmod 644 "$travosDirWithinArch/ssh_authorized_keys"
 cleanup::unmountArchBootPartitions() {
 	sudo umount -l "$archMountpoint/boot" 2>/dev/null || true
 	sudo umount -l "$bootEFIMountpointWithinArch" 2>/dev/null || true
@@ -495,11 +496,20 @@ if [ "$reprovision" == 'false' ]; then
 	msg 'Performing initial system upgrade...'
 	tryAFewTimes archChroot pacman --quiet --noconfirm --sync --refresh --refresh --sysupgrade
 	msg 'Installing base packages...'
-	tryAFewTimes archChroot pacman --quiet --noconfirm --sync --refresh --needed base linux grub arch-install-scripts mkinitcpio netctl ifplugd openssh haveged python python2
+	tryAFewTimes archChroot pacman --quiet --noconfirm --sync --refresh --needed base base-devel linux grub arch-install-scripts mkinitcpio netctl ifplugd openssh haveged python python2 sudo
+	sudo mkdir -p "$travosDirWithinArch/bootstrap_pkg"
+	sudo cp -r "$resDir/bootstrap_pkg"/*.tar.* "$travosDirWithinArch/bootstrap_pkg"
+	tryAFewTimes archChroot pacman --quiet --noconfirm --sync --refresh --needed --asdeps $(sudo cat "$resDir/bootstrap_pkg/dependencies.packages")
+	archChroot bash -c 'pacman --noconfirm --upgrade --needed /travos/bootstrap_pkg/*.tar.*'
 	msg 'Generating locales...'
 	archChroot locale-gen &> /dev/null
+	msg 'Preparing provisioning user...'
+	archChroot useradd -r -d /tmp -s /bin/bash "$travosProvisioningUser"
+	echo "$travosProvisioningUser ALL=(ALL) NOPASSWD: /usr/bin/pacman" | sudo tee "$archMountpoint/etc/sudoers.d/allow-travos-provisioning" > /dev/null
+	sudo chmod 440 "$archMountpoint/etc/sudoers.d/allow-travos-provisioning"
+	msg 'Generating initramfs...'
 	if ! grep -qP '^HOOKS="base udev autodetect modconf block filesystems keyboard fsck"$' "$archMountpoint/etc/mkinitcpio.conf"; then
-		msg "Default HOOKS have changed in the Arch bootstrai image's mkinitcpio.conf." >&2
+		msg "Default HOOKS have changed in the Arch bootstrap image's mkinitcpio.conf." >&2
 		msg "Current HOOKS: $(grep -P '^HOOKS=' "$archMountpoint/etc/mkinitcpio.conf")" >&2
 		msg 'Please update this script with the new hooks.' >&2
 		cleanup 1
@@ -508,7 +518,6 @@ if [ "$reprovision" == 'false' ]; then
 	# It's important to put the 'keyboard' hook before the 'autodetect' hook, otherwise not
 	# all keyboards will get recognized at boot.
 	sudo sed -ri 's/^HOOKS=.*$/HOOKS="base systemd keyboard autodetect sd-vconsole modconf block sd-encrypt filesystems fsck"/' "$archMountpoint/etc/mkinitcpio.conf"
-	msg 'Generating initramfs...'
 	archChroot mkinitcpio -p linux
 	echo travos | sudo tee "$archMountpoint/etc/hostname" > /dev/null
 	echo 'SUBSYSTEM=="net",'                              \
@@ -603,7 +612,7 @@ qemu::waitForSSH() {
 	sleep 10
 	archConnected='false'
 	for i in $(seq 1 10); do
-		if ssh -p 2244 "${qemuSSHArgs[@]}" root@localhost uptime &> /dev/null; then
+		if ssh -p 2244 "${qemuSSHArgs[@]}" "${travosProvisioningUser}@localhost" uptime &> /dev/null; then
 			msg 'Connected to Arch.'
 			archConnected='true'
 			break
