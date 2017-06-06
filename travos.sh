@@ -413,13 +413,15 @@ cleanup::tempLUKSKeyFiles() {
 cleanupTasks+=(cleanup::tempLUKSKeyFiles)
 chmod 600 "$tempLUKSKeyFile1" "$tempLUKSKeyFile2"
 if [ -z "$LUKS_KEYFILE" ]; then
-	echo -n "$LUKS_PASSWORD" > "$tempLUKSKeyFile1"
+	cat <<EOF | tr -d '\n' > "$tempLUKSKeyFile1"
+$LUKS_PASSWORD
+EOF
 else
 	cat "$LUKS_KEYFILE" > "$tempLUKSKeyFile1"
 fi
 luksFormat() {
 	# Usage: luksFormat <UUID> <device>
-	sudo cryptsetup luksFormat --batch-mode --key-file="$tempLUKSKeyFile1" --use-random --cipher aes-xts-plain64 --key-size 512 --hash sha512 --iter-time 5000 --uuid="$1" "$2"
+	sudo cryptsetup luksFormat --batch-mode --key-file="$tempLUKSKeyFile1" --use-random --cipher aes-xts-plain64 --key-size 512 --hash sha512 --iter-time 1000 --uuid="$1" "$2"
 	if [ -n "$LUKS_KEYFILE" -a -n "$LUKS_PASSWORD" ]; then
 		echo -n "$LUKS_PASSWORD" > "$tempLUKSKeyFile2"
 		sudo cryptsetup luksAddKey --batch-mode --key-file="$tempLUKSKeyFile1" --iter-time 5000 "$2" "$tempLUKSKeyFile2"
