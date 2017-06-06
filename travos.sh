@@ -645,7 +645,15 @@ popd &> /dev/null
 sudo sync
 
 qemu::launch() {
-	sudo qemu-system-x86_64 -enable-kvm -localtime -m 4G -vga std -drive file="$device",cache=none,format=raw "$@" 2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
+	sudo qemu-system-x86_64                                           \
+		-enable-kvm                                               \
+		-localtime                                                \
+		-m 4G                                                     \
+		-vga std                                                  \
+		-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress" \
+		-netdev user,id=mynet0                                    \
+		-drive file="$device",cache=none,format=raw               \
+		"$@" 2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
 }
 
 if [ "$isTest" == 'true' ]; then
