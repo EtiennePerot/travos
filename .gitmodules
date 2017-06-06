@@ -1,0 +1,3 @@
+[submodule "ansible/library/submodules/ansible-aur"]
+	path = ansible/library/submodules/ansible-aur
+	url = https://github.com/cdown/ansible-aur
