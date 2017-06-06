@@ -115,13 +115,13 @@ if [ ! -f "$configFile" ]; then
 	usage
 fi
 if [ "$isTest" == 'true' -a -z "$device" ]; then
-	if [ "$reprovision" == 'true' ]; then
-		msg '--reprovision is incompatible with local testing mode.'
-		usage
-	fi
 	testScratchImage="$scratchDir/test.img"
-	rm -f "$testScratchImage"
-	truncate -s 128G "$testScratchImage"
+	if [ "$reprovision" != 'true' ]; then
+		rm -f "$testScratchImage"
+	fi
+	if [ ! -f "$testScratchImage" ]; then
+		truncate -s 128G "$testScratchImage"
+	fi
 	testScratchDevice="$(sudo losetup --show -f "$testScratchImage")"
 	device="$testScratchDevice"
 	bootDOSPartition="${device}p1"
