@@ -55,7 +55,7 @@ tryAFewTimes() {
 			echo "[$i]: Retrying command: $@"
 		fi
 	done
-	"$@"
+	"$@" || return 1
 }
 
 for neededBinary in sudo truncate sha256sum gpg wget sgdisk mkfs.vfat mkfs.ext4 partprobe losetup grub-install ionice bsdtar rsync cryptsetup qemu-system-x86_64 ansible-playbook; do
@@ -159,6 +159,7 @@ PROVISIONING_PRIVATE_KEY=''
 PROVISIONING_PUBLIC_KEY=''
 ANSIBLE_ROLES_PATH=()
 ANSIBLE_ROLES=()
+ANSIBLE_LIBRARY=()
 source "$configFile"
 if [ -z "$LUKS_PASSWORD" -a -z "$LUKS_KEYFILE" ]; then
 	msg 'Config file must specify at least one of LUKS_PASSWORD, LUKS_KEYFILE.'
@@ -193,7 +194,6 @@ if [ ! -f "$PROVISIONING_PUBLIC_KEY" ]; then
 	cleanup 1
 fi
 ansibleRolesPath="$scriptDir/ansible/roles"
-ansibleRoles='travos'
 for ansibleRolePath in "${ANSIBLE_ROLES_PATH[@]}"; do
 	if [ ! -d "$ansibleRolePath" ]; then
 		msg "Ansible role path '$ansibleRolePath' does not exist or is not a directory."
@@ -201,8 +201,17 @@ for ansibleRolePath in "${ANSIBLE_ROLES_PATH[@]}"; do
 	fi
 	ansibleRolesPath="${ansibleRolesPath}:${ansibleRolePath}"
 done
+ansibleRoles='travos'
 for ansibleRole in "${ANSIBLE_ROLES[@]}"; do
 	ansibleRoles="${ansibleRoles}, $ansibleRole"
+done
+ansibleLibrary="$scriptDir/ansible/library"
+for ansibleLibraryPath in "${ANSIBLE_LIBRARY[@]}"; do
+	if [ ! -d "$ansibleLibraryPath" ]; then
+		msg "Ansible library path '$ansibleLibraryPath' does not exist or is not a directory."
+		cleanup 1
+	fi
+	ansibleLibrary="${ansibleLibrary}:${ansibleLibraryPath}"
 done
 
 msg 'Cleaning up previous runs...'
@@ -608,6 +617,7 @@ qemu::waitForSSH() {
 cat <<EOF > "$tempDir/ansible.cfg"
 [defaults]
 inventory = ansible-inventory.ini
+library = $ansibleLibrary
 roles_path = $ansibleRolesPath
 
 [ssh_connection]
