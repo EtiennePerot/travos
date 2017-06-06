@@ -86,7 +86,7 @@ TODO: Instructions on how to automatically customize the Arch installation.
 
 ### If it has hardware-encryption, why are some partitions LUKS-encrypted?
 
-[Defense in depth]. even if the Aegis had a backdoor PIN or static encryption key, it wouldn't be enough to get at your data partition.
+[Defense in depth]. Even if the Aegis had a backdoor PIN or static encryption key, it wouldn't be enough to get at your data partition.
 
 ## Licensing
 
