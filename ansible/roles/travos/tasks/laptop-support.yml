@@ -3,13 +3,6 @@
     name: "{{ item }}"
     state: latest
   with_items:
-    - git
-    - python2
-    - python
-    - go
-    - go-tools
-    - gnupg
-    - util-linux # SSD TRIMming and ionice.
     - strace
     - gdb
     - zip
@@ -33,11 +26,15 @@
     name: "{{ item }}"
     state: latest
   with_items:
+    - xf86-input-keyboard
+    - xf86-input-mouse
     - xf86-input-synaptics
-    - xf86-video-vesa
+    - xf86-video-amdgpu
     - xf86-video-ati
     - xf86-video-intel
     - xf86-video-nouveau
+    - xf86-video-openchrome
+    - xf86-video-vesa
 
 - name: install packages filesystems
   package:
@@ -49,9 +46,12 @@
     - btrfs-progs
     - e2fsprogs
     - ntfs-3g
+    - nfs-utils
     - hfsprogs
-    - encfs
     - parted
+    - encfs
+    - sshfs
+    - lvm2
 
 - name: install packages network tools
   package:
@@ -59,7 +59,9 @@
     state: latest
   with_items:
     - net-tools
+    - bind-tools
     - openbsd-netcat
+    - iperf
     - iputils
     - traceroute
     - rsync

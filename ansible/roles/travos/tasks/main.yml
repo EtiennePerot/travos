@@ -1,1 +1,18 @@
+- name: install basic packages
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - git
+    - python2
+    - python
+    - gnupg
+    - screen
+    - tmux
+    - vim
+    - nano
+    - util-linux # SSD TRIMming and ionice.
+  register: install_basic_packages
+
 - include: laptop-support.yml
+  when: install_basic_packages|succeeded
