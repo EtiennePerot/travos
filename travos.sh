@@ -622,6 +622,28 @@ qemu::waitForSSH() {
 		cleanup 1
 	fi
 }
+qemu::sync() {
+	ssh -p 2244 "${qemuSSHArgs[@]}" "root@localhost" sync
+}
+qemu::shutdown() {
+	qemu::sync
+	for i in $(seq 1 5); do
+		ssh -p 2244 "${qemuSSHArgs[@]}" "root@localhost" poweroff &> /dev/null || true
+	done
+	sleep 3
+	qemuTurnedOff='false'
+	for i in $(seq 1 10); do
+		if ! ssh -p 2244 "${qemuSSHArgs[@]}" "root@localhost" uptime &> /dev/null; then
+			qemuTurnedOff='true'
+			break
+		fi
+		sleep 3
+	done
+	if [ "$qemuTurnedOff" == 'false' ]; then
+		return 1
+	fi
+	return 0
+}
 cat <<EOF > "$tempDir/ansible.cfg"
 [defaults]
 inventory = ansible-inventory.ini
@@ -649,7 +671,9 @@ pushd "$tempDir" &> /dev/null
 popd &> /dev/null
 
 cleanup::disableBootstrapService
+qemu::sync
 sudo sync
+qemu::shutdown
 
 qemu::launch() {
 	sudo qemu-system-x86_64                                           \
