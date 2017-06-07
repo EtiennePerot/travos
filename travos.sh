@@ -545,6 +545,10 @@ msg 'Preparing Arch installation for provisioning...'
 archChroot systemctl enable "netctl-ifplugd@$qemuEthernetInterface"
 sudo cp "$resDir/travos-ssh-bootstrap.service" "$archMountpoint/etc/systemd/system/"
 sudo chmod 644 "$archMountpoint/etc/systemd/system/travos-ssh-bootstrap.service"
+cleanup::disableBootstrapService() {
+	sudo rm -f "$archMountpoint/etc/systemd/system/multi-user.target.wants/travos-ssh-bootstrap.service"
+}
+cleanupTasks+=(cleanup::disableBootstrapService)
 sudo ln -fs '/etc/systemd/system/travos-ssh-bootstrap.service' "$archMountpoint/etc/systemd/system/multi-user.target.wants/"
 
 # Unmount Arch partitions before we start up a VM against them.
@@ -644,6 +648,7 @@ pushd "$tempDir" &> /dev/null
 	tryAFewTimes ansible-playbook playbook.yml -l travos
 popd &> /dev/null
 
+cleanup::disableBootstrapService
 sudo sync
 
 qemu::launch() {
