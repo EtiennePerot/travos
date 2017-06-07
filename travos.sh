@@ -17,19 +17,21 @@ msg() {
 
 cleanupTasks=()
 cleanup() {
-	if [ "$isDebug" == 'true' ]; then
-		msg 'Going to clean up in 3 minutes... Ctrl+C to interrupt.'
-		sleep 3m
+	if [ "${#cleanupTasks[@]}" -gt 0 ]; then
+		if [ "$isDebug" == 'true' ]; then
+			msg 'Going to clean up in 3 minutes... Ctrl+C to interrupt.'
+			sleep 3m
+		fi
+		msg 'Cleaning up...'
+		reverseCleanupTasks=()
+		for (( idx=${#cleanupTasks[@]}-1 ; idx>=0 ; idx-- )) ; do
+			reverseCleanupTasks+=("${cleanupTasks[idx]}")
+		done
+		for task in "${reverseCleanupTasks[@]}"; do
+			$task || true
+		done
+		cleanupTasks=()
 	fi
-	msg 'Cleaning up...'
-	reverseCleanupTasks=()
-	for (( idx=${#cleanupTasks[@]}-1 ; idx>=0 ; idx-- )) ; do
-		reverseCleanupTasks+=("${cleanupTasks[idx]}")
-	done
-	for task in "${reverseCleanupTasks[@]}"; do
-		$task || true
-	done
-	cleanupTasks=()
 	if [ "$#" -ne 0 ]; then
 		exit "$1"
 	fi
