@@ -9,6 +9,7 @@ OS for traveling. Meant to be installed on a USB key of size at least 96 GB.
     * [Kali Linux](https://www.kali.org/). Current version: `2017.1`
     * [System Rescue CD](https://www.system-rescue-cd.org/). Current version: `5.01`
 * Boot onto a persistent, LUKS-encrypted Arch installation from that same USB stick.
+* Automatically provision that Arch installation using [Ansible].
 * Chainload to on-disk operating system.
 * Memtest86+.
 
@@ -29,8 +30,16 @@ $ ./travos.sh --config=my-config.cfg --test
 Or you can use both to write the image to the USB key *and* start it with [QEMU]:
 
 ```bash
-$ ./travos.sh --config=my-config.cfg --test /dev/sdX
+$ ./travos.sh --config=my-config.cfg /dev/sdX --test
 ```
+
+If you've edited your Ansible playbook and just want to re-run it against the key without wiping+reformatting it:
+
+```bash
+$ ./travos.sh --config=my-config.cfg /dev/sdX --reprovision
+```
+
+See `./travos.sh --help` for full usage details.
 
 ## Partition scheme
 
@@ -92,6 +101,7 @@ TODO: Instructions on how to automatically customize the Arch installation.
 
 As portions of this project are heavily based off [multibootusb] which is under the [GPLv3], this project is also licensed under [GPLv3].
 
+[Ansible]: https://ansible.com/
 [multibootusb]: https://github.com/aguslr/multibootusb
 [GPLv3]: https://www.gnu.org/licenses/quick-guide-gplv3.en.html
 [QEMU]: http://www.qemu.org/
