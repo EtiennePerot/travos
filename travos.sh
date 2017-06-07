@@ -102,7 +102,7 @@ for arg; do
 		skipImageVerification='true'
 	elif [ "$arg" == --reprovision -o "$arg" == -reprovision ]; then
 		reprovision='true'
-	elif [ "$arg" == --help -o "$arg" == -help -o "$arg" == -h ]; then
+	elif [ "$arg" == --help -o "$arg" == -help -o "$arg" == -h -o "$arg" == --usage -o "$arg" == -usage ]; then
 		usage
 	else
 		device="$arg"
