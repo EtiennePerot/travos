@@ -164,6 +164,7 @@ PROVISIONING_PUBLIC_KEY=''
 ANSIBLE_ROLES_PATH=()
 ANSIBLE_ROLES=()
 ANSIBLE_LIBRARY=()
+ANSIBLE_ACTION_PLUGINS=()
 source "$configFile"
 if [ -z "$LUKS_PASSWORD" -a -z "$LUKS_KEYFILE" ]; then
 	msg 'Config file must specify at least one of LUKS_PASSWORD, LUKS_KEYFILE.'
@@ -208,6 +209,18 @@ for ansibleLibraryPath in "${ANSIBLE_LIBRARY[@]}"; do
 		cleanup 1
 	fi
 	ansibleLibrary="${ansibleLibrary}:${ansibleLibraryPath}"
+done
+ansibleActionPlugins=''
+for ansibleActionPluginsPath in "${ANSIBLE_ACTION_PLUGINS[@]}"; do
+	if [ ! -d "$ansibleActionPluginsPath" ]; then
+		msg "Ansible action plugins path '$ansibleActionPluginsPath' does not exist or is not a directory."
+		cleanup 1
+	fi
+	if [ "$ansibleActionPlugins" == '' ]; then
+		ansibleActionPlugins="$ansibleActionPluginsPath"
+	else
+		ansibleActionPlugins="${ansibleActionPlugins}:${ansibleActionPluginsPath}"
+	fi
 done
 
 msg 'Cleaning up previous runs...'
@@ -669,6 +682,7 @@ cat <<EOF > "$tempDir/ansible.cfg"
 inventory = ansible-inventory.ini
 library = $ansibleLibrary
 roles_path = $ansibleRolesPath
+action_plugins = $ansibleActionPlugins
 
 [ssh_connection]
 ssh_args = ${qemuSSHArgs[@]}
