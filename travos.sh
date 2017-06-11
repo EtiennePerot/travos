@@ -548,6 +548,7 @@ msg 'Preparing Arch installation for provisioning...'
 archChroot systemctl enable "netctl-ifplugd@$qemuEthernetInterface"
 sudo cp "$resDir/travos-ssh-bootstrap.service" "$archMountpoint/etc/systemd/system/"
 sudo chmod 644 "$archMountpoint/etc/systemd/system/travos-ssh-bootstrap.service"
+sudo rm -f "$archMountpoint/var/lib/pacman/db.lck"
 cleanup::disableBootstrapService() {
 	archPartitionRemountedForBootstrap='false'
 	if [ ! -f "$archMountpoint/etc/systemd/system/multi-user.target.wants/travos-ssh-bootstrap.service" ]; then
