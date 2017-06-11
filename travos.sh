@@ -630,11 +630,11 @@ if [ -z "$archQEMUPID" ]; then
 	cleanup 1
 fi
 qemu::forceKillArch() {
-	sudo kill -9 "$archQEMUPID"
+	sudo kill -9 "$archQEMUPID" &> /dev/null || true
 }
 cleanupTasks+=(qemu::forceKillArch)
 qemu::killAndWaitArch() {
-	sudo kill "$archQEMUPID" || true
+	sudo kill "$archQEMUPID" &> /dev/null || true
 	wait "$archQEMUPID"
 }
 qemuSSHArgs=(-i "$PROVISIONING_PRIVATE_KEY" -o ConnectTimeout=5 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no)
