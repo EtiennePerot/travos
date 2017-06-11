@@ -84,8 +84,6 @@
     - alsa-firmware
     - alsa-lib
     - alsa-utils
-    - x264
-    - ffmpeg
 
 - name: regular TRIMming
   when: install_packages_misc|succeeded
