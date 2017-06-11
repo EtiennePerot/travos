@@ -76,7 +76,7 @@ usage() {
 	echo "   Real+QEMU usage: $0 --config=my-config.cfg --test /dev/sdX"                         >&2
 	echo ''                                                                                      >&2
 	echo '   Other options:'                                                                     >&2
-	echo '     --debug                Set Bash -x option (print all commands as they run).'      >&2
+	echo '     --debug                Print all commands as they run & misc debugging tweaks.'   >&2
 	echo '     --reprovision          Update an existing key and re-run Ansible provisioning.'   >&2
 	echo '     --skip-verification    If set, downloaded images are not verified for integrity.' >&2
 	cleanup 1
@@ -583,7 +583,6 @@ cleanup::unmountArchBootPartitions || true
 cleanup::unmountArchPartitions || true
 sudo sync
 
-msg 'Launching Arch in background QEMU...'
 archQEMUCommand=(
 	qemu-system-x86_64                                                 \
 		-enable-kvm                                                \
@@ -598,13 +597,20 @@ archQEMUCommand=(
 		-initrd "$bootDirectory/initramfs-linux.img"               \
 		-append root="/dev/disk/by-uuid/$archRealUUID"
 )
+if [ "$isDebug" == 'true' ]; then
+	msg 'Launching Arch in QEMU...'
+	graphicOptions=''
+else
+	msg 'Launching Arch in background QEMU...'
+	graphicOptions='-nographic'
+fi
 touch "$tempDir/qemu.pid"
 cat <<EOF > "$tempDir/qemu-launch.sh"
 #!/usr/bin/env bash
 
 set -u
 set +x
-${archQEMUCommand[@]} -nographic &
+${archQEMUCommand[@]} $graphicOptions &
 echo "\$!" > "$tempDir/qemu.pid"
 sync
 wait
@@ -633,7 +639,7 @@ qemu::killAndWaitArch() {
 }
 qemuSSHArgs=(-i "$PROVISIONING_PRIVATE_KEY" -o ConnectTimeout=5 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no)
 qemu::sync() {
-	ssh -p 2244 "${qemuSSHArgs[@]}" "root@localhost" sync
+	ssh -p 2244 "${qemuSSHArgs[@]}" "root@localhost" sync &> /dev/null
 }
 qemu::shutdown() {
 	qemu::sync
@@ -736,7 +742,7 @@ if [ "$isTest" == 'true' ]; then
 		-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress" \
 		-netdev user,id=mynet0                                    \
 		-drive file="$device",cache=none,format=raw               \
-		"$@" 2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
+		2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
 fi
 
 if [ "$ansibleFailed" == true ]; then
