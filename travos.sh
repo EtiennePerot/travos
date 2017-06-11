@@ -567,24 +567,27 @@ cleanup::unmountArchPartitions || true
 sudo sync
 
 msg 'Launching Arch in background QEMU...'
+archQEMUCommand=(
+	qemu-system-x86_64                                                 \
+		-enable-kvm                                                \
+		-localtime                                                 \
+		-m 4G                                                      \
+		-vga std                                                   \
+		-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress"  \
+		-netdev user,id=mynet0,hostfwd=tcp::2244-:2244             \
+		-drive file="$device",cache=none,format=raw                \
+		-drive file="$archMappedPartition",cache=none,format=raw   \
+		-kernel "$bootDirectory/vmlinuz-linux"                     \
+		-initrd "$bootDirectory/initramfs-linux.img"               \
+		-append root="/dev/disk/by-uuid/$archRealUUID"
+)
 touch "$tempDir/qemu.pid"
 cat <<EOF > "$tempDir/qemu-launch.sh"
 #!/usr/bin/env bash
 
 set -u
 set +x
-qemu-system-x86_64                                                 \
-	-enable-kvm                                                \
-	-localtime                                                 \
-	-m 4G                                                      \
-	-vga std -nographic                                        \
-	-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress"  \
-	-netdev user,id=mynet0,hostfwd=tcp::2244-:2244             \
-	-drive file="$device",cache=none,format=raw                \
-	-drive file="$archMappedPartition",cache=none,format=raw   \
-	-kernel "$bootDirectory/vmlinuz-linux"                     \
-	-initrd "$bootDirectory/initramfs-linux.img"               \
-	-append root="/dev/disk/by-uuid/$archRealUUID" &
+${archQEMUCommand[@]} -nographic &
 echo "\$!" > "$tempDir/qemu.pid"
 sync
 wait
@@ -612,24 +615,6 @@ qemu::killAndWaitArch() {
 	wait "$archQEMUPID"
 }
 qemuSSHArgs=(-i "$PROVISIONING_PRIVATE_KEY" -o ConnectTimeout=5 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no)
-qemu::waitForSSH() {
-	msg 'Waiting for Arch to come up...'
-	sleep 10
-	archConnected='false'
-	for i in $(seq 1 10); do
-		if ssh -p 2244 "${qemuSSHArgs[@]}" "${travosProvisioningUser}@localhost" uptime &> /dev/null; then
-			msg 'Connected to Arch.'
-			archConnected='true'
-			break
-		fi
-		msg "Still waiting for Arch to come up... ($i/10)"
-		sleep 5
-	done
-	if [ "$archConnected" == 'false' ]; then
-		msg 'Arch did not come up in time.'
-		cleanup 1
-	fi
-}
 qemu::sync() {
 	ssh -p 2244 "${qemuSSHArgs[@]}" "root@localhost" sync
 }
@@ -651,6 +636,29 @@ qemu::shutdown() {
 		return 1
 	fi
 	return 0
+}
+qemu::waitForSSH() {
+	msg 'Waiting for Arch to come up...'
+	sleep 10
+	archConnected='false'
+	for i in $(seq 1 10); do
+		if ssh -p 2244 "${qemuSSHArgs[@]}" "${travosProvisioningUser}@localhost" uptime &> /dev/null; then
+			msg 'Connected to Arch.'
+			archConnected='true'
+			break
+		fi
+		msg "Still waiting for Arch to come up... ($i/10)"
+		sleep 5
+	done
+	if [ "$archConnected" == 'false' ]; then
+		msg 'Arch did not come up in time.'
+		if [ "$isDebug" == 'true' ]; then
+			qemu::killAndWaitArch || true
+			msg 'Spawning Arch again with visible display (for debugging)...'
+			sudo "${archQEMUCommand[@]}" || true
+		fi
+		cleanup 1
+	fi
 }
 cat <<EOF > "$tempDir/ansible.cfg"
 [defaults]
