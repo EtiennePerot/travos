@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# Replace stdin with /dev/null and store the real stdin in file descriptor 3.
+exec 3<&0 </dev/null
+
 scriptDir="$(dirname "$BASH_SOURCE")"
 cd "$scriptDir"
 scriptDir="$(pwd)"
@@ -593,7 +596,7 @@ sync
 wait
 EOF
 chmod +x "$tempDir/qemu-launch.sh"
-sudo "$tempDir/qemu-launch.sh" 2>/dev/null &
+sudo --background "$tempDir/qemu-launch.sh" &> /dev/null
 archQEMUPID=''
 for i in $(seq 1 10); do
 	sleep 1
@@ -682,8 +685,25 @@ cleanup::sync() {
 	sudo sync
 }
 cleanupTasks+=(cleanup::sync)
+ansibleFailed='false'
 pushd "$tempDir" &> /dev/null
-	tryAFewTimes ansible-playbook playbook.yml -l travos
+	ansibleRetry='true'
+	while [ "$ansibleRetry" == true ]; do
+		if ansible-playbook playbook.yml -l travos; then
+			ansibleFailed='false'
+			ansibleRetry='false'
+		else
+			ansibleFailed='true'
+			echo -n '>> Ansible failed. Retry? (Y/n) '
+			read -r ansibleRetryPrompt <&3
+			ansibleRetryPrompt="$(echo "$ansibleRetryPrompt" | tr '[:upper:]' '[:lower:]')"
+			if [ "$ansibleRetryPrompt" == n -o "$ansibleRetryPrompt" == no ]; then
+				ansibleRetry='false'
+			else
+				ansibleRetry='true'
+			fi
+		fi
+	done
 popd &> /dev/null
 
 cleanup::disableBootstrapService
@@ -691,7 +711,8 @@ qemu::sync
 sudo sync
 qemu::shutdown
 
-qemu::launch() {
+if [ "$isTest" == 'true' ]; then
+	msg 'Launching QEMU...'
 	sudo qemu-system-x86_64                                           \
 		-enable-kvm                                               \
 		-localtime                                                \
@@ -701,11 +722,12 @@ qemu::launch() {
 		-netdev user,id=mynet0                                    \
 		-drive file="$device",cache=none,format=raw               \
 		"$@" 2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
-}
-
-if [ "$isTest" == 'true' ]; then
-	msg 'Launching QEMU...'
-	qemu::launch
 fi
-msg 'All done.'
-cleanup 0
+
+if [ "$ansibleFailed" == true ]; then
+	msg 'All done, though there were errors running Ansible.'
+	cleanup 4
+else
+	msg 'All done.'
+	cleanup 0
+fi
