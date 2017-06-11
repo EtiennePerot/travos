@@ -2,6 +2,10 @@
 
 OS for traveling. Meant to be installed on a USB key of size at least 96 GB.
 
+<div align="center">
+	<img src="https://github.com/EtiennePerot/travos/blob/master/res/grub.png?raw=true" alt="TravOS GRUB menu"/>
+</div>
+
 ## Features
 
 * Boot on multiple live Linux distributions from a single USB stick:
