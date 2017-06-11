@@ -546,7 +546,15 @@ archChroot systemctl enable "netctl-ifplugd@$qemuEthernetInterface"
 sudo cp "$resDir/travos-ssh-bootstrap.service" "$archMountpoint/etc/systemd/system/"
 sudo chmod 644 "$archMountpoint/etc/systemd/system/travos-ssh-bootstrap.service"
 cleanup::disableBootstrapService() {
+	archPartitionRemountedForBootstrap='false'
+	if [ ! -f "$archMountpoint/etc/systemd/system/multi-user.target.wants/travos-ssh-bootstrap.service" ]; then
+		sudo mount "$archMappedPartition" "$archMountpoint"
+		archPartitionRemountedForBootstrap='true'
+	fi
 	sudo rm -f "$archMountpoint/etc/systemd/system/multi-user.target.wants/travos-ssh-bootstrap.service"
+	if [ "$archPartitionRemountedForBootstrap" == true ]; then
+		sudo umount -l "$archMountpoint"
+	fi
 }
 cleanupTasks+=(cleanup::disableBootstrapService)
 sudo ln -fs '/etc/systemd/system/travos-ssh-bootstrap.service' "$archMountpoint/etc/systemd/system/multi-user.target.wants/"
