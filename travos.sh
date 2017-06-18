@@ -350,6 +350,7 @@ ifInitial() {
 	fi
 }
 ifInitial msg 'Creating new partitions...'
+ifInitial sudo sgdisk --zap-all "$device" 2> /dev/null
 # Typecode EF02 is from https://www.gnu.org/software/grub/manual/html_node/BIOS-installation.html
 ifInitial sudo sgdisk --clear             \
 	--new=1:1M:2M   --typecode=1:EF02 \
