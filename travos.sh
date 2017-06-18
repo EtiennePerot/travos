@@ -261,7 +261,7 @@ images=(
 	# Kali Linux: https://www.kali.org/downloads/
 	"http://cdimage.kali.org/kali-2017.1/kali-linux-kde-2017.1-amd64.iso|${imagesDir}|verify::sha256|839741fec378114ff068df3ec2dbed9d8e4fae613e690d50b25ce9cc1468104b"
 	# Tails: https://tails.boum.org/install/download/openpgp/index.en.html
-	"https://25.dl.amnesia.boum.org/tails/stable/tails-i386-2.12/tails-i386-2.12.iso|${imagesDir}|verify::gpg_detached|https://tails.boum.org/torrents/files/tails-i386-2.12.iso.sig|https://tails.boum.org/tails-signing.key"
+	"https://mirrors.wikimedia.org/tails/stable/tails-amd64-3.0/tails-amd64-3.0.iso|${imagesDir}|verify::gpg_detached|https://tails.boum.org/torrents/files/tails-amd64-3.0.iso.sig|https://tails.boum.org/tails-signing.key"
 	# System Rescue CD: http://www.system-rescue-cd.org/Download/
 	"https://downloads.sourceforge.net/project/systemrescuecd/sysresccd-x86/5.0.1/systemrescuecd-x86-5.0.1.iso|${imagesDir}|verify::sha256|17f56dc7779d3716539a39a312ddb07d27f2cb1aa55b12420960bd67b00f6c9f"
 )
