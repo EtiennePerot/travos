@@ -153,6 +153,9 @@ if [ ! -e "$device" ]; then
 fi
 refreshPartitions() {
 	sudo partprobe "$device"
+	sudo partprobe || true
+	sleep 3
+	sudo partprobe || true
 }
 refreshPartitions
 
