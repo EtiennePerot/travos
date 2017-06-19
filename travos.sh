@@ -81,6 +81,7 @@ usage() {
 	echo "   Real+QEMU usage: $0 --config=my-config.cfg --test /dev/sdX"                         >&2
 	echo ''                                                                                      >&2
 	echo '   Other options:'                                                                     >&2
+	echo '     --hostname=foo         Set the hostname to the given value. (Default: "travos".)' >&2
 	echo '     --debug                Print all commands as they run & misc debugging tweaks.'   >&2
 	echo '     --reprovision          Update an existing key and re-run Ansible provisioning.'   >&2
 	echo '     --skip-verification    If set, downloaded images are not verified for integrity.' >&2
@@ -95,10 +96,15 @@ skipImageVerification='false'
 reprovision='false'
 configFile=''
 nextArgIsConfigFile='false'
+chosenHostname='travos'
+nextArgIsHostname='false'
 for arg; do
 	if [ "$nextArgIsConfigFile" == 'true' ]; then
 		configFile="$arg"
 		nextArgIsConfigFile='false'
+	elif [ "$nextArgIsHostname" == 'true' ]; then
+		chosenHostname="$arg"
+		nextArgIsHostname='false'
 	elif [ "$arg" == --test -o "$arg" == -test ]; then
 		isTest='true'
 	elif [ "$arg" == --test-unlocked -o "$arg" == -test-unlocked ]; then
@@ -108,6 +114,10 @@ for arg; do
 		nextArgIsConfigFile='true'
 	elif echo "$arg" | grep -qiP '^--?config=.+$'; then
 		configFile="$(echo "$arg" | cut -d'=' -f2-)"
+	elif [ "$arg" == --hostname -o "$arg" == -hostname ]; then
+		nextArgIsHostname='true'
+	elif echo "$arg" | grep -qiP '^--?hostname=.+$'; then
+		chosenHostname="$(echo "$arg" | cut -d'=' -f2-)"
 	elif [ "$arg" == --debug -o "$arg" == -debug ]; then
 		isDebug='true'
 		set -x
@@ -544,7 +554,7 @@ if [ "$reprovision" == 'false' ]; then
 	# all keyboards will get recognized at boot.
 	sudo sed -ri 's/^HOOKS=.*$/HOOKS="base systemd keyboard autodetect sd-vconsole modconf block sd-encrypt filesystems fsck"/' "$archMountpoint/etc/mkinitcpio.conf"
 	archChroot mkinitcpio -p linux
-	echo travos | sudo tee "$archMountpoint/etc/hostname" > /dev/null
+	echo "$chosenHostname" | sudo tee "$archMountpoint/etc/hostname" > /dev/null
 	echo 'SUBSYSTEM=="net",'                              \
 		'ACTION=="add",'                              \
 		"ATTR{address}==\"$qemuEthernetMACAddress\"," \
@@ -713,7 +723,7 @@ ssh_args = ${qemuSSHArgs[@]}
 EOF
 cat <<EOF > "$tempDir/ansible-inventory.ini"
 [all]
-travos ansible_host=localhost ansible_user=root ansible_port=2244
+$chosenHostname ansible_host=localhost ansible_user=root ansible_port=2244
 EOF
 cat <<EOF > "$tempDir/playbook.yml"
 - hosts: [all]
@@ -728,7 +738,7 @@ ansibleFailed='false'
 pushd "$tempDir" &> /dev/null
 	ansibleRetry='true'
 	while [ "$ansibleRetry" == true ]; do
-		if ansible-playbook playbook.yml -l travos; then
+		if ansible-playbook playbook.yml -l "$chosenHostname"; then
 			ansibleFailed='false'
 			ansibleRetry='false'
 		else
