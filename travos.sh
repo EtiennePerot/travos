@@ -768,6 +768,7 @@ pushd "$tempDir" &> /dev/null
 	done
 popd &> /dev/null
 
+msg 'Stopping Arch VM...'
 cleanup::disableBootstrapService
 qemu::sync
 sudo sync
