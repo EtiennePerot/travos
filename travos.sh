@@ -45,6 +45,11 @@ unexpected_cleanup() {
 	cleanup 2
 }
 trap unexpected_cleanup ERR
+waitPID() {
+	while stat "/proc/$1" &> /dev/null; do
+		sleep 1
+	done
+}
 
 tempDir="$(umask 077 && mktemp -d)"
 cleanup::tempDir() {
@@ -646,7 +651,7 @@ qemu::forceKillArch() {
 cleanupTasks+=(qemu::forceKillArch)
 qemu::killAndWaitArch() {
 	sudo kill "$archQEMUPID" &> /dev/null || true
-	wait "$archQEMUPID"
+	waitPID "$archQEMUPID"
 }
 qemuSSHArgs=(-i "$PROVISIONING_PRIVATE_KEY" -o ConnectTimeout=5 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no)
 qemu::sync() {
@@ -669,7 +674,7 @@ qemu::shutdown() {
 	if [ "$qemuTurnedOff" == 'false' ]; then
 		return 1
 	fi
-	wait "$archQEMUPID" || true
+	waitPID "$archQEMUPID" || true
 	sleep 1
 	return 0
 }
