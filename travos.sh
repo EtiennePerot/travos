@@ -616,7 +616,6 @@ sudo sync
 archQEMUCommand=(
 	qemu-system-x86_64                                                 \
 		-enable-kvm                                                \
-		-localtime                                                 \
 		-m 4G                                                      \
 		-vga std                                                   \
 		-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress"  \
@@ -782,7 +781,6 @@ if [ "$isTest" == 'true' ]; then
 		msg 'Launching QEMU...'
 		sudo qemu-system-x86_64                                           \
 			-enable-kvm                                               \
-			-localtime                                                \
 			-m 4G                                                     \
 			-vga std                                                  \
 			-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress" \
