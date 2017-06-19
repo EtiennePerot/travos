@@ -168,6 +168,7 @@ ANSIBLE_ROLES_PATH=()
 ANSIBLE_ROLES=()
 ANSIBLE_LIBRARY=()
 ANSIBLE_ACTION_PLUGINS=()
+EXTRA_LINUX_BOOT_OPTIONS=''
 source "$configFile"
 if [ -z "$LUKS_PASSWORD" -a -z "$LUKS_KEYFILE" ]; then
 	msg 'Config file must specify at least one of LUKS_PASSWORD, LUKS_KEYFILE.'
@@ -399,7 +400,8 @@ if [ "$(cat /proc/sys/vm/dirty_background_bytes)" -eq 0 ]; then
 	sudo bash -c 'echo $((48*1024*1024)) > /proc/sys/vm/dirty_bytes'
 fi
 msg 'Copying live Linux images...'
-sudo ionice -c 3 -t cp -r "$scriptDir/boot"/* "$bootDirectory/"
+sudo ionice -c 3 -t rsync -rth --inplace --progress --bwlimit=16M "$scriptDir/boot"/* "$bootDirectory/"
+cat "$scriptDir/boot/grub/grub.cfg" | sed -r "s~%EXTRA_LINUX_BOOT_OPTIONS%~${EXTRA_LINUX_BOOT_OPTIONS}~g" | sudo tee "$bootDirectory/grub/grub.cfg" > /dev/null
 for sourceISOFile in "$imagesDir"/*.iso; do
 	targetISOFile="$efiISODirectory/$(basename "$sourceISOFile")"
 	if [ -f "$targetISOFile" ]; then
