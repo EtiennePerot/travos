@@ -79,11 +79,13 @@ usage() {
 	echo '     --debug                Print all commands as they run & misc debugging tweaks.'   >&2
 	echo '     --reprovision          Update an existing key and re-run Ansible provisioning.'   >&2
 	echo '     --skip-verification    If set, downloaded images are not verified for integrity.' >&2
+	echo '     --test-unlocked        Implies --test; runs Arch on unlocked partitions.'         >&2
 	cleanup 1
 }
 
 device=''
 isTest='false'
+isTestUnlocked='false'
 skipImageVerification='false'
 reprovision='false'
 configFile=''
@@ -94,6 +96,9 @@ for arg; do
 		nextArgIsConfigFile='false'
 	elif [ "$arg" == --test -o "$arg" == -test ]; then
 		isTest='true'
+	elif [ "$arg" == --test-unlocked -o "$arg" == -test-unlocked ]; then
+		isTest='true'
+		isTestUnlocked='true'
 	elif [ "$arg" == --config -o "$arg" == -config ]; then
 		nextArgIsConfigFile='true'
 	elif echo "$arg" | grep -qiP '^--?config=.+$'; then
@@ -741,16 +746,21 @@ sudo sync
 qemu::shutdown
 
 if [ "$isTest" == 'true' ]; then
-	msg 'Launching QEMU...'
-	sudo qemu-system-x86_64                                           \
-		-enable-kvm                                               \
-		-localtime                                                \
-		-m 4G                                                     \
-		-vga std                                                  \
-		-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress" \
-		-netdev user,id=mynet0                                    \
-		-drive file="$device",cache=none,format=raw               \
-		2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
+	if [ "$isTestUnlocked" == true ]; then
+		msg 'Launching QEMU... (unlocked)'
+		sudo "${archQEMUCommand[@]}" 2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
+	else
+		msg 'Launching QEMU...'
+		sudo qemu-system-x86_64                                           \
+			-enable-kvm                                               \
+			-localtime                                                \
+			-m 4G                                                     \
+			-vga std                                                  \
+			-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress" \
+			-netdev user,id=mynet0                                    \
+			-drive file="$device",cache=none,format=raw               \
+			2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
+	fi
 fi
 
 if [ "$ansibleFailed" == true ]; then
