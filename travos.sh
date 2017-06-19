@@ -84,6 +84,7 @@ usage() {
 	echo '     --hostname=foo         Set the hostname to the given value. (Default: "travos".)' >&2
 	echo '     --debug                Print all commands as they run & misc debugging tweaks.'   >&2
 	echo '     --reprovision          Update an existing key and re-run Ansible provisioning.'   >&2
+	echo '     --provision-loop       Prompt to re-run provisioning after every provisioning.'   >&2
 	echo '     --skip-verification    If set, downloaded images are not verified for integrity.' >&2
 	echo '     --test-unlocked        Implies --test; runs Arch on unlocked partitions.'         >&2
 	cleanup 1
@@ -94,6 +95,7 @@ isTest='false'
 isTestUnlocked='false'
 skipImageVerification='false'
 reprovision='false'
+provisionLoop='false'
 configFile=''
 nextArgIsConfigFile='false'
 chosenHostname='travos'
@@ -125,6 +127,8 @@ for arg; do
 		skipImageVerification='true'
 	elif [ "$arg" == --reprovision -o "$arg" == -reprovision ]; then
 		reprovision='true'
+	elif [ "$arg" == --provision-loop -o "$arg" == -provision-loop ]; then
+		provisionLoop='true'
 	elif [ "$arg" == --help -o "$arg" == -help -o "$arg" == -h -o "$arg" == --usage -o "$arg" == -usage ]; then
 		usage
 	else
@@ -740,10 +744,17 @@ pushd "$tempDir" &> /dev/null
 	while [ "$ansibleRetry" == true ]; do
 		if ansible-playbook playbook.yml -l "$chosenHostname"; then
 			ansibleFailed='false'
-			ansibleRetry='false'
+			ansiblePrompt="$provisionLoop"
 		else
 			ansibleFailed='true'
-			echo -n '>> Ansible failed. Retry? (Y/n) '
+			ansiblePrompt='true'
+		fi
+		if [ "$ansiblePrompt" == true ]; then
+			if [ "$ansibleFailed" == true ]; then
+				echo -n '>> Ansible failed. Retry? (Y/n) '
+			else
+				echo -n '>> Ansible succeeded. Run it again? (Y/n) '
+			fi
 			read -r ansibleRetryPrompt <&3
 			ansibleRetryPrompt="$(echo "$ansibleRetryPrompt" | tr '[:upper:]' '[:lower:]')"
 			if [ "$ansibleRetryPrompt" == n -o "$ansibleRetryPrompt" == no ]; then
@@ -751,6 +762,8 @@ pushd "$tempDir" &> /dev/null
 			else
 				ansibleRetry='true'
 			fi
+		else
+			ansibleRetry='false'
 		fi
 	done
 popd &> /dev/null
