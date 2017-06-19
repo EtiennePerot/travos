@@ -664,6 +664,8 @@ qemu::shutdown() {
 	if [ "$qemuTurnedOff" == 'false' ]; then
 		return 1
 	fi
+	wait "$archQEMUPID" || true
+	sleep 1
 	return 0
 }
 qemu::waitForSSH() {
