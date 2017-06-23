@@ -532,6 +532,11 @@ if [ "$reprovision" == 'false' ]; then
 	msg 'Preparing pacman...'
 	archChroot pacman-key --init &> /dev/null
 	archChroot pacman-key --populate archlinux &> /dev/null
+	# Delete Linux kernel if already built; we will regenerate it later anyway.
+	# This avoids the "/boot/vmlinuz-linux exists in filesystem" that might show up when
+	# doing an initial system upgrade from a bootstrap image that includes an older kernel
+	# than the newest one.
+	sudo rm -f "$archMountpoint/boot/vmlinuz-linux"
 	msg 'Performing initial system upgrade...'
 	tryAFewTimes archChroot pacman --quiet --noconfirm --sync --refresh --refresh --sysupgrade
 	msg 'Installing base packages...'
