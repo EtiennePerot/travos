@@ -603,7 +603,7 @@ cleanup::disableBootstrapService() {
 		sudo mount "$archMappedPartition" "$archMountpoint"
 		archPartitionRemountedForBootstrap='true'
 	fi
-	sudo rm -f "$archMountpoint/etc/systemd/system/multi-user.target.wants/travos-ssh-bootstrap.service"
+	sudo rm -f "$archMountpoint/etc/systemd/system/multi-user.target.wants/travos-ssh-bootstrap.service" &> /dev/null
 	if [ "$archPartitionRemountedForBootstrap" == true ]; then
 		sudo umount -l "$archMountpoint"
 	fi
