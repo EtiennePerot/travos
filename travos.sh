@@ -553,7 +553,7 @@ if [ "$reprovision" == 'false' ]; then
 		msg 'Please update this script with the new hooks.' >&2
 		cleanup 1
 	fi
-	sudo sed -ri 's/^MODULES="(.*)"/MODULES="\1 ohci_pci xhci-hcd"/g' "$archMountpoint/etc/mkinitcpio.conf"
+	sudo sed -ri 's/^MODULES="(.*)"/MODULES="\1 xhci-pci xhci-hcd"/g' "$archMountpoint/etc/mkinitcpio.conf"
 	# It's important to put the 'keyboard' hook before the 'autodetect' hook, otherwise not
 	# all keyboards will get recognized at boot.
 	sudo sed -ri 's/^HOOKS=.*$/HOOKS="base systemd keyboard autodetect sd-vconsole modconf block sd-encrypt filesystems fsck"/' "$archMountpoint/etc/mkinitcpio.conf"
