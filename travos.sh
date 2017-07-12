@@ -181,7 +181,7 @@ refreshPartitions() {
 	sleep 3
 	sudo partprobe || true
 }
-refreshPartitions
+refreshPartitions || true
 
 msg "Reading configuration '$configFile'..."
 LUKS_PASSWORD=''
