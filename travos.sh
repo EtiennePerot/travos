@@ -87,6 +87,10 @@ usage() {
 	echo '     --provision-loop       Prompt to re-run provisioning after every provisioning.'   >&2
 	echo '     --skip-verification    If set, downloaded images are not verified for integrity.' >&2
 	echo '     --test-unlocked        Implies --test; runs Arch on unlocked partitions.'         >&2
+	echo '     --uuid-force           Run even if disks with colliding UUIDs are present.'       >&2
+	echo '                            This may cause data loss.'                                 >&2
+	echo '     --uuid-offset=0        Set UUID offset from 0 to 9. Can be used to deal with'     >&2
+	echo '                            disk UUID collisions.'                                     >&2
 	cleanup 1
 }
 
@@ -96,6 +100,9 @@ isTestUnlocked='false'
 skipImageVerification='false'
 reprovision='false'
 provisionLoop='false'
+isUUIDForce='false'
+uuidOffset='0'
+nextArgIsUUIDOffset='false'
 configFile=''
 nextArgIsConfigFile='false'
 chosenHostname='travos'
@@ -104,6 +111,9 @@ for arg; do
 	if [ "$nextArgIsConfigFile" == 'true' ]; then
 		configFile="$arg"
 		nextArgIsConfigFile='false'
+	elif [ "$nextArgIsUUIDOffset" == 'true' ]; then
+		uuidOffset="$arg"
+		nextArgIsUUIDOffset='false'
 	elif [ "$nextArgIsHostname" == 'true' ]; then
 		chosenHostname="$arg"
 		nextArgIsHostname='false'
@@ -112,10 +122,16 @@ for arg; do
 	elif [ "$arg" == --test-unlocked -o "$arg" == -test-unlocked ]; then
 		isTest='true'
 		isTestUnlocked='true'
+	elif [ "$arg" == --uuid-force -o "$arg" == -uuid-force ]; then
+		isUUIDForce='true'
 	elif [ "$arg" == --config -o "$arg" == -config ]; then
 		nextArgIsConfigFile='true'
 	elif echo "$arg" | grep -qiP '^--?config=.+$'; then
 		configFile="$(echo "$arg" | cut -d'=' -f2-)"
+	elif [ "$arg" == --uuid-offset -o "$arg" == -uuid-offset ]; then
+		nextArgIsUUIDOffset='true'
+	elif echo "$arg" | grep -qiP '^--?uuid-offset=.+$'; then
+		uuidOffset="$(echo "$arg" | cut -d'=' -f2-)"
 	elif [ "$arg" == --hostname -o "$arg" == -hostname ]; then
 		nextArgIsHostname='true'
 	elif echo "$arg" | grep -qiP '^--?hostname=.+$'; then
@@ -147,6 +163,10 @@ if [ -z "$configFile" ]; then
 fi
 if [ ! -f "$configFile" ]; then
 	msg "Config file '$configFile' does not exist or is not a file."
+	usage
+fi
+if ! echo "$uuidOffset" | grep -qiP '^[0-9]$'; then
+	msg "UUID offset must be a digit between 0 and 9 (got '$uuidOffset')."
 	usage
 fi
 if [ "$isTest" == 'true' -a -z "$device" ]; then
@@ -363,18 +383,71 @@ for imageData in "${images[@]}"; do
 	fi
 done
 
-# Partition 1: MSDOS boot, 32M,  fat32, ID B007-0D05 "boot dos"
-# Partition 2: EFI boot,   ~8G,  fat32, ID B007-0EF1 "boot efi"
-# Partition 3: Arch,       48GB, ext4, UUID a5c8a5c8-a5c8-a5c8-a5c8-a5c8a5c8a5c8 "arch"
-# Partition 4: Home,       rest, ext4, UUID 803e803e-803e-803e-803e-803e803e803e "home"
-bootDOSID='B0070D05'     # As specified to mkfs.fat32
-bootDOSUUID='B007-0D05'  # As listed in /dev/disk/by-uuid.
-bootEFIID='B0070EF1'     # As specified to mkfs.fat32
-bootEFIUUID='B007-0EF1'  # As listed in /dev/disk/by-uuid.
-archLUKSUUID='0075a105-1035-a5c8-0000-deadbeefcafe'
-archRealUUID='0075a105-5ea1-a5c8-0000-deadbeefcafe'
-homeLUKSUUID='0075a105-1035-803e-0000-deadbeefcafe'
-homeRealUUID='0075a105-5ea1-803e-0000-deadbeefcafe'
+offsetUUID() {
+	echo "$1" | sed -r "s/o/${uuidOffset}/g"
+}
+
+# Partition 1: MSDOS boot, 32M,  fat32,     ID B007-oD05 "boot dos"
+# Partition 2: EFI boot,   ~8G,  fat32,     ID B007-oEF1 "boot efi"
+# Partition 3: Arch,       48GB, LUKS+ext4, UUID 0075a105-1035-a5c8-oooo-deadbeefcafe "arch"
+# Partition 4: Home,       rest, LUKS+ext4, UUID 0075a105-1035-803e-oooo-deadbeefcafe "home"
+# "o" is replaced by the UUID offset (default "0").
+bootDOSID="$(offsetUUID    'B007oD05')"     # As specified to mkfs.fat32
+bootDOSUUID="$(offsetUUID  'B007-oD05')"  # As listed in /dev/disk/by-uuid.
+bootEFIID="$(offsetUUID    'B007oEF1')"     # As specified to mkfs.fat32
+bootEFIUUID="$(offsetUUID  'B007-oEF1')"  # As listed in /dev/disk/by-uuid.
+archLUKSUUID="$(offsetUUID '0075a105-1035-a5c8-oooo-deadbeefcafe')"
+archRealUUID="$(offsetUUID '0075a105-5ea1-a5c8-oooo-deadbeefcafe')"
+homeLUKSUUID="$(offsetUUID '0075a105-1035-803e-oooo-deadbeefcafe')"
+homeRealUUID="$(offsetUUID '0075a105-5ea1-803e-oooo-deadbeefcafe')"
+
+uuidDeviceExists() {
+	test -e "/dev/disk/by-uuid/$1"
+}
+
+anyUUIDExists() {
+	if uuidDeviceExists "$bootDOSUUID"; then
+		echo "$bootDOSUUID"
+		return 0
+	fi
+	if uuidDeviceExists "$bootEFIUUID"; then
+		echo "$bootEFIUUID"
+		return 0
+	fi
+	if uuidDeviceExists "$archLUKSUUID"; then
+		echo "$archLUKSUUID"
+		return 0
+	fi
+	if uuidDeviceExists "$archRealUUID"; then
+		echo "$archRealUUID"
+		return 0
+	fi
+	if uuidDeviceExists "$homeLUKSUUID"; then
+		echo "$homeLUKSUUID"
+		return 0
+	fi
+	if uuidDeviceExists "$homeRealUUID"; then
+		echo "$homeRealUUID"
+		return 0
+	fi
+	return 1
+}
+
+if anyUUIDExists &> /dev/null; then
+	msg "Device with UUID '$(anyUUIDExists || true)' already exists."
+	if [ "$isUUIDForce" == 'true' ]; then
+		msg 'Because --uuid-force was set, the script will continue anyway.'
+		msg 'THIS MAY CAUSE DATA LOSS.'
+		msg 'You have 15 seconds to press Ctrl+C to kill this script.'
+		sleep 18 # 3 extra seconds!
+	else
+		msg 'This may be because a run of this script did not complete properly,'
+		msg 'or because you are running this script on a system that was set up by'
+		msg 'this very same script. Re-running it may cause data loss.'
+		msg 'Please use --uuid-force or change --uuid-offset to continue.'
+		cleanup 1
+	fi
+fi
 
 ifInitial() {
 	if [ "$reprovision" == 'false' ]; then
@@ -432,7 +505,7 @@ if [ "$(cat /proc/sys/vm/dirty_background_bytes)" -eq 0 ]; then
 fi
 msg 'Copying live Linux images...'
 sudo ionice -c 3 -t rsync -rth --inplace --progress --bwlimit=16M "$scriptDir/boot"/* "$bootDirectory/"
-cat "$scriptDir/boot/grub/grub.cfg" | sed -r "s~%EXTRA_LINUX_BOOT_OPTIONS%~${EXTRA_LINUX_BOOT_OPTIONS}~g" | sudo tee "$bootDirectory/grub/grub.cfg" > /dev/null
+cat "$scriptDir/boot/grub/grub.cfg" | sed -r "s/%UUID_OFFSET%/${uuidOffset}/g" | sed -r "s~%EXTRA_LINUX_BOOT_OPTIONS%~${EXTRA_LINUX_BOOT_OPTIONS}~g" | sudo tee "$bootDirectory/grub/grub.cfg" > /dev/null
 for sourceISOFile in "$imagesDir"/*.iso; do
 	targetISOFile="$efiISODirectory/$(basename "$sourceISOFile")"
 	if [ -f "$targetISOFile" ]; then
@@ -626,7 +699,7 @@ cleanup::unmountArchPartitions || true
 sudo sync
 
 archQEMUCommand=(
-	qemu-system-x86_64                                                 \
+	qemu-system-x86_64                                             \
 		-enable-kvm                                                \
 		-m 4G                                                      \
 		-vga std                                                   \
@@ -635,7 +708,7 @@ archQEMUCommand=(
 		-drive file="$device",cache=none,format=raw                \
 		-drive file="$archMappedPartition",cache=none,format=raw   \
 		-kernel "$bootDirectory/vmlinuz-linux"                     \
-		-initrd "$bootDirectory/initramfs-linux.img"               \
+		-initrd "$bootDirectory/initramfs-linux-fallback.img"      \
 		-append root="/dev/disk/by-uuid/$archRealUUID"
 )
 if [ "$isDebug" == 'true' ]; then
