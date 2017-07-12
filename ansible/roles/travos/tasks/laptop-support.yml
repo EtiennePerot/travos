@@ -112,9 +112,3 @@
     owner: root
     group: root
     mode: 0644
-
-- name: get b43 wireles firmware blobs
-  become: yes
-  become_user: travos-prov
-  aur:
-    name: b43-firmware
