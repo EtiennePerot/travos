@@ -131,6 +131,12 @@ for arg; do
 		provisionLoop='true'
 	elif [ "$arg" == --help -o "$arg" == -help -o "$arg" == -h -o "$arg" == --usage -o "$arg" == -usage ]; then
 		usage
+	elif echo "$arg" | grep -qiP '^-'; then
+		msg "Unrecognized flag: '$arg'"
+		usage
+	elif [ -n "$device" ]; then
+		msg "May only specify one device flag (found '$device' and '$arg')."
+		usage
 	else
 		device="$arg"
 	fi
