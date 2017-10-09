@@ -82,6 +82,9 @@ usage() {
 	echo ''                                                                                      >&2
 	echo '   Other options:'                                                                     >&2
 	echo '     --hostname=foo         Set the hostname to the given value. (Default: "travos".)' >&2
+	echo '     --root-boundary=60G    Set the upper boundary of the root partition, with G suffix.' >&2
+	echo '                            Note that the first 9G will be reserved for other' >&2
+	echo '                            partitions. The 60G default means a root size of 51G.' >&2
 	echo '     --debug                Print all commands as they run & misc debugging tweaks.'   >&2
 	echo '     --reprovision          Update an existing key and re-run Ansible provisioning.'   >&2
 	echo '     --provision-loop       Prompt to re-run provisioning after every provisioning.'   >&2
@@ -107,6 +110,8 @@ configFile=''
 nextArgIsConfigFile='false'
 chosenHostname='travos'
 nextArgIsHostname='false'
+rootBoundary='60G'
+nextArgIsRootBoundary='false'
 for arg; do
 	if [ "$nextArgIsConfigFile" == 'true' ]; then
 		configFile="$arg"
@@ -117,6 +122,9 @@ for arg; do
 	elif [ "$nextArgIsHostname" == 'true' ]; then
 		chosenHostname="$arg"
 		nextArgIsHostname='false'
+	elif [ "$nextArgIsRootBoundary" == 'true' ]; then
+		rootBoundary="$arg"
+		nextArgIsRootBoundary='false'
 	elif [ "$arg" == --test -o "$arg" == -test ]; then
 		isTest='true'
 	elif [ "$arg" == --test-unlocked -o "$arg" == -test-unlocked ]; then
@@ -136,6 +144,8 @@ for arg; do
 		nextArgIsHostname='true'
 	elif echo "$arg" | grep -qiP '^--?hostname=.+$'; then
 		chosenHostname="$(echo "$arg" | cut -d'=' -f2-)"
+	elif echo "$arg" | grep -qiP '^--?root-boundary=.+$'; then
+		rootBoundary="$(echo "$arg" | cut -d'=' -f2-)"
 	elif [ "$arg" == --debug -o "$arg" == -debug ]; then
 		isDebug='true'
 		set -x
@@ -167,6 +177,14 @@ if [ ! -f "$configFile" ]; then
 fi
 if ! echo "$uuidOffset" | grep -qiP '^[0-9]$'; then
 	msg "UUID offset must be a digit between 0 and 9 (got '$uuidOffset')."
+	usage
+fi
+if ! echo "$rootBoundary" | grep -qP '^[0-9]+G'; then
+	msg "Root boundary must be of the format 'xG' (with 'x' being the number of gigabytes)."
+	usage
+fi
+if [ "$(echo "$rootBoundary" | cut -d'G' -f1)" -lt 21 ]; then
+	msg "Root boundary is too small. The root system files won't fit in there."
 	usage
 fi
 if [ "$isTest" == 'true' -a -z "$device" ]; then
@@ -457,13 +475,13 @@ ifInitial() {
 ifInitial msg 'Creating new partitions...'
 ifInitial sudo sgdisk --zap-all "$device" 2> /dev/null
 # Typecode EF02 is from https://www.gnu.org/software/grub/manual/html_node/BIOS-installation.html
-ifInitial sudo sgdisk --clear             \
-	--new=1:1M:2M   --typecode=1:EF02 \
-	--new=2:4M:8G   --typecode=2:EF00 \
-	--new=3:9G:60G  --typecode=3:8300 \
-	--largest-new=4 --typecode=4:8300 \
-	--hybrid=1,2,3                    \
-	--attributes=1:set:2              \
+ifInitial sudo sgdisk --clear                        \
+	--new='1:1M:2M'            --typecode=1:EF02 \
+	--new='2:4M:8G'            --typecode=2:EF00 \
+	--new="3:9G:$rootBoundary" --typecode=3:8300 \
+	--largest-new='4'          --typecode=4:8300 \
+	--hybrid='1,2,3'                             \
+	--attributes='1:set:2'                       \
 	"$device" 2>/dev/null
 ifInitial refreshPartitions
 ifInitial msg 'Creating filesystems...'
