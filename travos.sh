@@ -321,19 +321,19 @@ cleanup::recursiveCatchAllUnmount || true
 msg 'Fetching image files...'
 imagesDir="$scratchDir/images"
 mkdir -p "$imagesDir"
-archVersion='2017.07.01'
-tailsVersion='3.0.1'
+archVersion='2017.10.01'
+tailsVersion='3.2'
 # Syntax: 'URL|TARGET_DIRECTORY|VERIFICATION_FUNCTION|VERIFICATION_FUNCTION_ARGUMENTS'
 # VERIFICATION_FUNCTION will be called with arguments <downloaded file> <VERIFICATION_FUNCTION_ARGUMENTS>
 images=(
 	# Arch: https://mirrors.kernel.org/archlinux/iso/ (bootstrap image)
 	"https://mirrors.kernel.org/archlinux/iso/${archVersion}/archlinux-bootstrap-${archVersion}-x86_64.tar.gz|${scratchDir}|verify::gpg_detached|https://mirrors.kernel.org/archlinux/iso/${archVersion}/archlinux-bootstrap-${archVersion}-x86_64.tar.gz.sig|${resDir}/archlinux-key.pgp"
 	# Kali Linux: https://www.kali.org/downloads/
-	"http://cdimage.kali.org/kali-2017.1/kali-linux-kde-2017.1-amd64.iso|${imagesDir}|verify::sha256|839741fec378114ff068df3ec2dbed9d8e4fae613e690d50b25ce9cc1468104b"
+	"http://cdimage.kali.org/kali-2017.2/kali-linux-kde-2017.2-amd64.iso|${imagesDir}|verify::sha256|8a5849cd2d53ce0a7ae86abfb4068a35a6714b7229f25090eef827cb050e3d6d"
 	# Tails: https://tails.boum.org/install/download/openpgp/index.en.html
 	"https://mirrors.wikimedia.org/tails/stable/tails-amd64-${tailsVersion}/tails-amd64-${tailsVersion}.iso|${imagesDir}|verify::gpg_detached|https://tails.boum.org/torrents/files/tails-amd64-${tailsVersion}.iso.sig|https://tails.boum.org/tails-signing.key"
 	# System Rescue CD: http://www.system-rescue-cd.org/Download/
-	"https://downloads.sourceforge.net/project/systemrescuecd/sysresccd-x86/5.0.1/systemrescuecd-x86-5.0.1.iso|${imagesDir}|verify::sha256|17f56dc7779d3716539a39a312ddb07d27f2cb1aa55b12420960bd67b00f6c9f"
+	"https://downloads.sourceforge.net/project/systemrescuecd/sysresccd-x86/5.1.1/systemrescuecd-x86-5.1.1.iso|${imagesDir}|verify::sha256|5ab22119f2ca2e53d28880367e53b887df5cd82599b38d3175870d023455117a"
 )
 
 verify::sha256() {
