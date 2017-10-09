@@ -47,7 +47,6 @@
     - e2fsprogs
     - ntfs-3g
     - nfs-utils
-    - hfsprogs
     - parted
     - encfs
     - sshfs
