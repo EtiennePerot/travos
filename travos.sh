@@ -453,7 +453,9 @@ anyUUIDExists() {
 
 if anyUUIDExists &> /dev/null; then
 	msg "Device with UUID '$(anyUUIDExists || true)' already exists."
-	if [ "$isUUIDForce" == 'true' ]; then
+	if [ "$reprovision" == 'true' ]; then
+		msg '... but we are reprovisioning this device, so this is to be expected.'
+	elif [ "$isUUIDForce" == 'true' ]; then
 		msg 'Because --uuid-force was set, the script will continue anyway.'
 		msg 'THIS MAY CAUSE DATA LOSS.'
 		msg 'You have 15 seconds to press Ctrl+C to kill this script.'
