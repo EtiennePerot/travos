@@ -588,6 +588,11 @@ homeMappedPartition='/dev/mapper/travos-home'
 ifInitial sudo mkfs.ext4 -qFU "$archRealUUID" -O '^has_journal'      "$archMappedPartition" 2>/dev/null
 ifInitial sudo mkfs.ext4 -qFU "$homeRealUUID" -O '^has_journal' -m 0 "$homeMappedPartition" 2>/dev/null
 ifInitial refreshPartitions
+if [ "$reprovision" == 'true' ]; then
+	sudo fsck.ext4 -y "$archMappedPartition"
+	sudo fsck.ext4 -y "$homeMappedPartition"
+	refreshPartitions
+fi
 cleanup::unmountArchPartitions() {
 	sudo umount -l "$archMappedPartition" "$archMountpoint" 2>/dev/null || true
 	sudo umount -l "$homeMappedPartition" "$homeMountpoint" 2>/dev/null || true
