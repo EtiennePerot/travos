@@ -321,19 +321,19 @@ cleanup::recursiveCatchAllUnmount || true
 msg 'Fetching image files...'
 imagesDir="$scratchDir/images"
 mkdir -p "$imagesDir"
-archVersion='2017.10.01'
-tailsVersion='3.2'
+archVersion='2018.04.01'
+tailsVersion='3.6.2'
 # Syntax: 'URL|TARGET_DIRECTORY|VERIFICATION_FUNCTION|VERIFICATION_FUNCTION_ARGUMENTS'
 # VERIFICATION_FUNCTION will be called with arguments <downloaded file> <VERIFICATION_FUNCTION_ARGUMENTS>
 images=(
 	# Arch: https://mirrors.kernel.org/archlinux/iso/ (bootstrap image)
 	"https://mirrors.kernel.org/archlinux/iso/${archVersion}/archlinux-bootstrap-${archVersion}-x86_64.tar.gz|${scratchDir}|verify::gpg_detached|https://mirrors.kernel.org/archlinux/iso/${archVersion}/archlinux-bootstrap-${archVersion}-x86_64.tar.gz.sig|${resDir}/archlinux-key.pgp"
 	# Kali Linux: https://www.kali.org/downloads/
-	"http://cdimage.kali.org/kali-2017.2/kali-linux-kde-2017.2-amd64.iso|${imagesDir}|verify::sha256|8a5849cd2d53ce0a7ae86abfb4068a35a6714b7229f25090eef827cb050e3d6d"
-	# Tails: https://tails.boum.org/install/download/openpgp/index.en.html
+	"http://cdimage.kali.org/kali-2018.1/kali-linux-kde-2018.1-amd64.iso|${imagesDir}|verify::sha256|afecacef3ee75b5ef93c6ac4bf645f0c8b0212db22aa61e687c49157e6a170cc"
+	# Tails: https://tails.boum.org/install/download/index.en.html
 	"https://mirrors.wikimedia.org/tails/stable/tails-amd64-${tailsVersion}/tails-amd64-${tailsVersion}.iso|${imagesDir}|verify::gpg_detached|https://tails.boum.org/torrents/files/tails-amd64-${tailsVersion}.iso.sig|https://tails.boum.org/tails-signing.key"
 	# System Rescue CD: http://www.system-rescue-cd.org/Download/
-	"https://downloads.sourceforge.net/project/systemrescuecd/sysresccd-x86/5.1.1/systemrescuecd-x86-5.1.1.iso|${imagesDir}|verify::sha256|5ab22119f2ca2e53d28880367e53b887df5cd82599b38d3175870d023455117a"
+	"https://downloads.sourceforge.net/project/systemrescuecd/sysresccd-x86/5.2.2/systemrescuecd-x86-5.2.2.iso|${imagesDir}|verify::sha256|148bfbc16837d3e7ac13556f11b6a600bd6a88e98a8eb3a899d0fe243d826a3f"
 )
 
 verify::sha256() {
@@ -657,7 +657,7 @@ if [ "$reprovision" == 'false' ]; then
 	echo "$travosProvisioningUser ALL=(ALL) NOPASSWD: /usr/bin/pacman" | sudo tee "$archMountpoint/etc/sudoers.d/allow-travos-provisioning" > /dev/null
 	sudo chmod 440 "$archMountpoint/etc/sudoers.d/allow-travos-provisioning"
 	msg 'Generating initramfs...'
-	if ! grep -qP '^HOOKS="base udev autodetect modconf block filesystems keyboard fsck"$' "$archMountpoint/etc/mkinitcpio.conf"; then
+	if ! grep -qP "^HOOKS=\\(base udev autodetect modconf block filesystems keyboard fsck\\)\$" "$archMountpoint/etc/mkinitcpio.conf"; then
 		msg "Default HOOKS have changed in the Arch bootstrap image's mkinitcpio.conf." >&2
 		msg "Current HOOKS: $(grep -P '^HOOKS=' "$archMountpoint/etc/mkinitcpio.conf")" >&2
 		msg 'Please update this script with the new hooks.' >&2
@@ -666,7 +666,7 @@ if [ "$reprovision" == 'false' ]; then
 	sudo sed -ri 's/^MODULES="(.*)"/MODULES="\1 xhci-pci xhci-hcd"/g' "$archMountpoint/etc/mkinitcpio.conf"
 	# It's important to put the 'keyboard' hook before the 'autodetect' hook, otherwise not
 	# all keyboards will get recognized at boot.
-	sudo sed -ri 's/^HOOKS=.*$/HOOKS="base systemd keyboard autodetect sd-vconsole modconf block sd-encrypt filesystems fsck"/' "$archMountpoint/etc/mkinitcpio.conf"
+	sudo sed -ri 's/^HOOKS=.*$/HOOKS=(base systemd keyboard autodetect sd-vconsole modconf block sd-encrypt filesystems fsck)/' "$archMountpoint/etc/mkinitcpio.conf"
 	archChroot mkinitcpio -p linux
 	echo "$chosenHostname" | sudo tee "$archMountpoint/etc/hostname" > /dev/null
 	echo 'SUBSYSTEM=="net",'                              \
