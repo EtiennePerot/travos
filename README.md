@@ -2,6 +2,8 @@
 
 OS for traveling. Meant to be installed on a USB key of size at least 96 GB.
 
+Works great on desktops and laptops too.
+
 <div align="center">
 	<img src="https://github.com/EtiennePerot/travos/blob/master/res/grub.png?raw=true" alt="TravOS GRUB menu"/>
 </div>
@@ -9,9 +11,9 @@ OS for traveling. Meant to be installed on a USB key of size at least 96 GB.
 ## Features
 
 * Boot on multiple live Linux distributions from a single USB stick:
-    * [Tails](https://tails.boum.org/). Current version: `2.12`
-    * [Kali Linux](https://www.kali.org/). Current version: `2017.1`
-    * [System Rescue CD](https://www.system-rescue-cd.org/). Current version: `5.01`
+    * [Tails](https://tails.boum.org/).
+    * [Kali Linux](https://www.kali.org/).
+    * [System Rescue CD](https://www.system-rescue-cd.org/).
 * Boot onto a persistent, LUKS-encrypted Arch installation from that same USB stick.
 * Automatically provision that Arch installation using [Ansible].
 * Chainload to on-disk operating system.
@@ -19,7 +21,7 @@ OS for traveling. Meant to be installed on a USB key of size at least 96 GB.
 
 ## Usage
 
-Where `/dev/sdX` is your USB stick (WARNING: This will **erase all data** on `/dev/sdX`), and `my-config.cfg` as your configuration file (see `example.cfg` for details):
+Where `/dev/sdX` is your USB stick or any block device (WARNING: This will **erase all data** on `/dev/sdX`), and `my-config.cfg` as your configuration file (see `example.cfg` for details):
 
 ```bash
 $ ./travos.sh --config=my-config.cfg /dev/sdX
@@ -31,13 +33,13 @@ If you don't have a USB stick, you can use `--test` to create a temporary image 
 $ ./travos.sh --config=my-config.cfg --test
 ```
 
-Or you can use both to write the image to the USB key *and* start it with [QEMU]:
+Or you can use both to write the image to the USB key *and* start it with [QEMU]. This allows you to modify the USB image without rebooting onto it:
 
 ```bash
 $ ./travos.sh --config=my-config.cfg /dev/sdX --test
 ```
 
-If you've edited your Ansible playbook and just want to re-run it against the key without wiping+reformatting it:
+If you've only edited your Ansible playbook and want to re-run it against the key without wiping+reformatting it:
 
 ```bash
 $ ./travos.sh --config=my-config.cfg /dev/sdX --reprovision
@@ -54,8 +56,8 @@ In order to boot on as many computers as possible, the USB is formatted with a [
     * `/boot`: GRUB configuration and installation files, as copied from this repo's `/grub` directory.
     * `/isos`: ISO images for various live Linux distros.
     * `/bin`: Empty and unused; mostly just there to match `multibootusb`.
-* Partition 3, 48 GB: LUKS+ext4 Arch Linux root partition. (UUID: `0075a105-1035-a5c8-0000-deadbeefcafe`, "travos luks arch"). Not yet implemented.
-* Partition 4, rest of space: LUKS+ext4 home partition. (UUID: `0075a105-1035-803e-0000-deadbeefcafe`, "travos luks home"). Not yet implemented.
+* Partition 3, 48 GB: LUKS+ext4 Arch Linux root partition. (UUID: `0075a105-1035-a5c8-0000-deadbeefcafe`, "travos luks arch").
+* Partition 4, rest of space: LUKS+ext4 home partition. (UUID: `0075a105-1035-803e-0000-deadbeefcafe`, "travos luks home").
 
 Partitions 1-3 are meant to be expendable and completely recreatable from this repository. Partition 4 is meant to be carried over from key to key.
 
@@ -65,7 +67,16 @@ Most configuration is copied from [multibootusb], with changes to support the IS
 
 ## Arch provisioning
 
-TODO: Instructions on how to automatically customize the Arch installation.
+The persistent Arch installation can be configured with Ansible. Change the configuration (see `example.cfg`) to set the following variables:
+
+* `ANSIBLE_ROLES_PATH`: A set of directories where Ansible roles are located.
+* `ANSIBLE_ROLES`: A set of Ansible roles to execute on the Arch installation.
+* `ANSIBLE_LIBRARY`: A set of directories where custom Ansible library modules are located.
+* `ANSIBLE_ACTION_PLUGINS`: A set of directories where custom Ansible action plugins are located.
+
+The Ansible provisioning step is one of the last and typically longest parts of the script. It can be re-run without erasing the entire block device using the `--reprovision` flag.
+
+When actively working on the Ansible roles to provision with, `--provision-loop` is recommended; it will interactively ask whether to re-apply the Ansible playbook after every attempt, allowing a tight edit-apply loop. `--debug` is also useful as it provides a visible QEMU window useful to inspect the state of the host.
 
 ## Recommended USB key
 
