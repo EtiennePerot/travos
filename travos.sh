@@ -321,19 +321,21 @@ cleanup::recursiveCatchAllUnmount || true
 msg 'Fetching image files...'
 imagesDir="$scratchDir/images"
 mkdir -p "$imagesDir"
-archVersion='2018.04.01'
-tailsVersion='3.6.2'
+archVersion='2018.10.01'
+kaliVersion='2018.3a'
+tailsVersion='3.10.1'
+systemRescueCDVersion='5.3.1'
 # Syntax: 'URL|TARGET_DIRECTORY|VERIFICATION_FUNCTION|VERIFICATION_FUNCTION_ARGUMENTS'
 # VERIFICATION_FUNCTION will be called with arguments <downloaded file> <VERIFICATION_FUNCTION_ARGUMENTS>
 images=(
 	# Arch: https://mirrors.kernel.org/archlinux/iso/ (bootstrap image)
 	"https://mirrors.kernel.org/archlinux/iso/${archVersion}/archlinux-bootstrap-${archVersion}-x86_64.tar.gz|${scratchDir}|verify::gpg_detached|https://mirrors.kernel.org/archlinux/iso/${archVersion}/archlinux-bootstrap-${archVersion}-x86_64.tar.gz.sig|${resDir}/archlinux-key.pgp"
 	# Kali Linux: https://www.kali.org/downloads/
-	"http://cdimage.kali.org/kali-2018.1/kali-linux-kde-2018.1-amd64.iso|${imagesDir}|verify::sha256|afecacef3ee75b5ef93c6ac4bf645f0c8b0212db22aa61e687c49157e6a170cc"
+	"http://cdimage.kali.org/kali-${kaliVersion}/kali-linux-kde-${kaliVersion}-amd64.iso|${imagesDir}|verify::sha256|7fad2a1058f881d6ed37f5da05c4bab95852abfdb526ea86346e21eb7c7ac629"
 	# Tails: https://tails.boum.org/install/download/index.en.html
 	"https://mirrors.wikimedia.org/tails/stable/tails-amd64-${tailsVersion}/tails-amd64-${tailsVersion}.iso|${imagesDir}|verify::gpg_detached|https://tails.boum.org/torrents/files/tails-amd64-${tailsVersion}.iso.sig|https://tails.boum.org/tails-signing.key"
 	# System Rescue CD: http://www.system-rescue-cd.org/Download/
-	"https://downloads.sourceforge.net/project/systemrescuecd/sysresccd-x86/5.2.2/systemrescuecd-x86-5.2.2.iso|${imagesDir}|verify::sha256|148bfbc16837d3e7ac13556f11b6a600bd6a88e98a8eb3a899d0fe243d826a3f"
+	"https://downloads.sourceforge.net/project/systemrescuecd/sysresccd-x86/${systemRescueCDVersion}/systemrescuecd-x86-${systemRescueCDVersion}.iso|${imagesDir}|verify::sha256|ee4d1f2b9c15350cac6a098366809ba0b6573fa5d3c28874ad5ca28559f4a32d"
 )
 
 verify::sha256() {
