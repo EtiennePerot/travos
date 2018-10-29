@@ -15,4 +15,4 @@
   register: install_basic_packages
 
 - include: laptop-support.yml
-  when: install_basic_packages|succeeded
+  when: install_basic_packages is succeeded

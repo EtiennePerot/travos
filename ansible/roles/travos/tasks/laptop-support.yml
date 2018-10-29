@@ -85,7 +85,7 @@
     - alsa-utils
 
 - name: regular TRIMming
-  when: install_packages_misc|succeeded
+  when: install_packages_misc is succeeded
   systemd:
     daemon_reload: yes
     name: fstrim.timer
@@ -101,7 +101,7 @@
   register: journald_conf_d
 
 - name: volatile journald
-  when: journald_conf_d|succeeded
+  when: journald_conf_d is succeeded
   copy:
     dest: /etc/systemd/journald.conf.d/travos-usbstick.conf
     content: |
