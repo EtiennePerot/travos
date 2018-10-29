@@ -22,8 +22,8 @@ cleanupTasks=()
 cleanup() {
 	if [ "${#cleanupTasks[@]}" -gt 0 ]; then
 		if [ "$isDebug" == 'true' ]; then
-			msg 'Going to clean up in 3 minutes... Ctrl+C to interrupt.'
-			sleep 3m
+			msg 'Going to clean up in 1 minutes... Ctrl+C to interrupt.'
+			sleep 1m
 		fi
 		msg 'Cleaning up...'
 		reverseCleanupTasks=()
