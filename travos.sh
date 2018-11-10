@@ -296,7 +296,7 @@ ansibleRoles='travos'
 for ansibleRole in "${ANSIBLE_ROLES[@]}"; do
 	ansibleRoles="${ansibleRoles}, $ansibleRole"
 done
-ansibleLibrary="$scriptDir/ansible/library"
+ansibleLibrary="$scriptDir/ansible/library:/usr/share/ansible/plugins/modules"
 for ansibleLibraryPath in "${ANSIBLE_LIBRARY[@]}"; do
 	if [ ! -d "$ansibleLibraryPath" ]; then
 		msg "Ansible library path '$ansibleLibraryPath' does not exist or is not a directory."
