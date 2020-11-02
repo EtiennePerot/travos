@@ -775,12 +775,13 @@ if [ "$reprovisionLocal" == 'false' ]; then
 	sudo sync
 
 	archQEMUCommand=(
-		qemu-system-x86_64                                             \
+		qemu-system-x86_64                                                 \
 			-enable-kvm                                                \
 			-m 4G                                                      \
 			-vga std                                                   \
 			-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress"  \
 			-netdev user,id=mynet0,hostfwd=tcp::2244-:2244             \
+			-usbdevice tablet -show-cursor                             \
 			-drive file="$device",cache=none,format=raw                \
 			-drive file="$archMappedPartition",cache=none,format=raw   \
 			-kernel "$bootDirectory/vmlinuz-linux"                     \
@@ -940,6 +941,7 @@ if [ "$reprovisionLocal" == 'false' ]; then
 				-vga std                                                  \
 				-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress" \
 				-netdev user,id=mynet0                                    \
+				-usbdevice tablet -show-cursor                            \
 				-drive file="$device",cache=none,format=raw               \
 				2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
 		fi
