@@ -87,6 +87,7 @@ usage() {
 	echo '                            partitions. The 60G default means a root size of 51G.' >&2
 	echo '     --debug                Print all commands as they run & misc debugging tweaks.'   >&2
 	echo '     --reprovision          Update an existing key and re-run Ansible provisioning.'   >&2
+	echo '     --reprovision-local    Re-run Ansible provisioning on the local running system.'   >&2
 	echo '     --provision-loop       Prompt to re-run provisioning after every provisioning.'   >&2
 	echo '     --skip-verification    If set, downloaded images are not verified for integrity.' >&2
 	echo '     --test-unlocked        Implies --test; runs Arch on unlocked partitions.'         >&2
@@ -102,6 +103,7 @@ isTest='false'
 isTestUnlocked='false'
 skipImageVerification='false'
 reprovision='false'
+reprovisionLocal='false'
 provisionLoop='false'
 isUUIDForce='false'
 uuidOffset='0'
@@ -151,6 +153,8 @@ for arg; do
 		set -x
 	elif [ "$arg" == --skip-verification -o "$arg" == -skip-verification ]; then
 		skipImageVerification='true'
+	elif [ "$arg" == --reprovision-local -o "$arg" == -reprovision-local ]; then
+		reprovisionLocal='true'
 	elif [ "$arg" == --reprovision -o "$arg" == -reprovision ]; then
 		reprovision='true'
 	elif [ "$arg" == --provision-loop -o "$arg" == -provision-loop ]; then
@@ -187,6 +191,20 @@ if [ "$(echo "$rootBoundary" | cut -d'G' -f1)" -lt 21 ]; then
 	msg "Root boundary is too small. The root system files won't fit in there."
 	usage
 fi
+if [ "$reprovisionLocal" == 'true' ]; then
+	if [ "$reprovision" == 'true' ]; then
+		msg "Cannot specify with --reprovision and --reprovision-local."
+		usage
+	fi
+	if [ -n "$device" ]; then
+		msg "Cannot specify a device to install to with --reprovision-local."
+		usage
+	fi
+	if [ "$isTest" == 'true' ]; then
+		msg "Cannot run in test mode with --reprovision-local."
+		usage
+	fi
+fi
 if [ "$isTest" == 'true' -a -z "$device" ]; then
 	testScratchImage="$scratchDir/test.img"
 	if [ "$reprovision" != 'true' ]; then
@@ -211,16 +229,20 @@ else
 	archPartition="${device}3"
 	homePartition="${device}4"
 fi
-if [ -z "$device" ]; then
-	msg 'Must specify device as /dev/sdX'
-	usage
-fi
-if [ ! -e "$device" ]; then
-	msg "Device '$device' does not exist."
-	usage
+if [ "$reprovisionLocal" != true ]; then
+	if [ -z "$device" ]; then
+		msg 'Must specify device as /dev/sdX'
+		usage
+	fi
+	if [ ! -e "$device" ]; then
+		msg "Device '$device' does not exist."
+		usage
+	fi
 fi
 refreshPartitions() {
-	sudo partprobe "$device"
+	if [ -n "$device" ]; then
+		sudo partprobe "$device"
+	fi
 	sudo partprobe || true
 	sleep 3
 	sudo partprobe || true
@@ -274,7 +296,7 @@ ansibleRoles='travos'
 for ansibleRole in "${ANSIBLE_ROLES[@]}"; do
 	ansibleRoles="${ansibleRoles}, $ansibleRole"
 done
-ansibleLibrary="$scriptDir/ansible/library"
+ansibleLibrary="$scriptDir/ansible/library:/usr/share/ansible/plugins/modules"
 for ansibleLibraryPath in "${ANSIBLE_LIBRARY[@]}"; do
 	if [ ! -d "$ansibleLibraryPath" ]; then
 		msg "Ansible library path '$ansibleLibraryPath' does not exist or is not a directory."
@@ -412,9 +434,9 @@ offsetUUID() {
 # Partition 3: Arch,       48GB, LUKS+ext4, UUID 0075a105-1035-a5c8-oooo-deadbeefcafe "arch"
 # Partition 4: Home,       rest, LUKS+ext4, UUID 0075a105-1035-803e-oooo-deadbeefcafe "home"
 # "o" is replaced by the UUID offset (default "0").
-bootDOSID="$(offsetUUID    'B007oD05')"     # As specified to mkfs.fat32
+bootDOSID="$(offsetUUID    'B007oD05')"   # As specified to mkfs.fat32.
 bootDOSUUID="$(offsetUUID  'B007-oD05')"  # As listed in /dev/disk/by-uuid.
-bootEFIID="$(offsetUUID    'B007oEF1')"     # As specified to mkfs.fat32
+bootEFIID="$(offsetUUID    'B007oEF1')"   # As specified to mkfs.fat32.
 bootEFIUUID="$(offsetUUID  'B007-oEF1')"  # As listed in /dev/disk/by-uuid.
 archLUKSUUID="$(offsetUUID '0075a105-1035-a5c8-oooo-deadbeefcafe')"
 archRealUUID="$(offsetUUID '0075a105-5ea1-a5c8-oooo-deadbeefcafe')"
@@ -455,7 +477,7 @@ anyUUIDExists() {
 
 if anyUUIDExists &> /dev/null; then
 	msg "Device with UUID '$(anyUUIDExists || true)' already exists."
-	if [ "$reprovision" == 'true' ]; then
+	if [ "$reprovision" == 'true' -o "$reprovisionLocal" == 'true' ]; then
 		msg '... but we are reprovisioning this device, so this is to be expected.'
 	elif [ "$isUUIDForce" == 'true' ]; then
 		msg 'Because --uuid-force was set, the script will continue anyway.'
@@ -472,166 +494,168 @@ if anyUUIDExists &> /dev/null; then
 fi
 
 ifInitial() {
-	if [ "$reprovision" == 'false' ]; then
+	if [ "$reprovision" == 'false' -a "$reprovisionLocal" == 'false' ]; then
 		"$@"
 	fi
 }
-ifInitial msg 'Creating new partitions...'
-ifInitial sudo sgdisk --zap-all "$device" 2> /dev/null
-# Typecode EF02 is from https://www.gnu.org/software/grub/manual/html_node/BIOS-installation.html
-ifInitial sudo sgdisk --clear                        \
-	--new='1:1M:2M'            --typecode=1:EF02 \
-	--new='2:4M:8G'            --typecode=2:EF00 \
-	--new="3:9G:$rootBoundary" --typecode=3:8300 \
-	--largest-new='4'          --typecode=4:8300 \
-	--hybrid='1,2,3'                             \
-	--attributes='1:set:2'                       \
-	"$device" 2>/dev/null
-ifInitial refreshPartitions
-ifInitial msg 'Creating filesystems...'
-ifInitial sudo mkfs.vfat -i "$bootDOSID" "$bootDOSPartition" &>/dev/null
-ifInitial sudo mkfs.vfat -i "$bootEFIID" "$bootEFIPartition" &>/dev/null
-ifInitial refreshPartitions
-bootEFIDevice="/dev/disk/by-uuid/$bootEFIUUID"
-if [ ! -e "$bootEFIDevice" ]; then
-	msg "Cannot find boot EFI device '$bootEFIDevice'."
-	cleanup 1
-fi
-mountpointDir="$scratchDir/mnt"
-bootEFIMountpoint="$mountpointDir/boot-efi"
-archMountpoint="$mountpointDir/arch"
-homeMountpoint="$mountpointDir/home"
-mkdir -p "$bootEFIMountpoint" "$archMountpoint" "$homeMountpoint"
-cleanup::unmountEFI() {
-	sudo umount -l "$bootEFIMountpoint" 2>/dev/null || true
-}
-cleanupTasks+=(cleanup::unmountEFI)
-
-msg 'Preparing boot partitions...'
-sudo mount "$bootEFIDevice" "$bootEFIMountpoint"
-bootDirectory="$bootEFIMountpoint/boot"
-efiISODirectory="$bootEFIMountpoint/isos"
-efiBinDirectory="$bootEFIMountpoint/bin"
-sudo mkdir -p "$bootDirectory" "$efiISODirectory" "$efiBinDirectory"
-sudo chown root:root "$bootDirectory" "$efiISODirectory" "$efiBinDirectory"
-ifInitial msg 'Installing GRUB for EFI...'
-ifInitial sudo grub-install --target=x86_64-efi --efi-directory="$bootEFIMountpoint" --boot-directory="$bootDirectory" --removable --recheck
-ifInitial msg 'Installing GRUB for legacy booting...'
-ifInitial sudo grub-install --target=i386-pc --recheck --boot-directory="$bootDirectory" --removable "$device"
-ifInitial refreshPartitions
-if [ "$(cat /proc/sys/vm/dirty_background_bytes)" -eq 0 ]; then
-	# This can slow the system down a lot by dirtying pages, so apply saner values.
-	# See https://lwn.net/Articles/572911/
-	sudo bash -c 'echo $((16*1024*1024)) > /proc/sys/vm/dirty_background_bytes'
-	sudo bash -c 'echo $((48*1024*1024)) > /proc/sys/vm/dirty_bytes'
-fi
-msg 'Copying live Linux images...'
-sudo ionice -c 3 -t rsync -rth --inplace --progress --bwlimit=16M "$scriptDir/boot"/* "$bootDirectory/"
-cat "$scriptDir/boot/grub/grub.cfg" | sed -r "s/%UUID_OFFSET%/${uuidOffset}/g" | sed -r "s~%EXTRA_LINUX_BOOT_OPTIONS%~${EXTRA_LINUX_BOOT_OPTIONS}~g" | sudo tee "$bootDirectory/grub/grub.cfg" > /dev/null
-for sourceISOFile in "$imagesDir"/*.iso; do
-	targetISOFile="$efiISODirectory/$(basename "$sourceISOFile")"
-	if [ -f "$targetISOFile" ]; then
-		if [ "$skipImageVerification" == 'true' ]; then
-			msg "Existing ISO '$(basename "$sourceISOFile")' detected, but image verification is off; assuming image is correct."
-		else
-			msg "Existing ISO '$(basename "$sourceISOFile")' detected, syncing..."
-			sudo ionice -c 3 -t rsync -cth --inplace --progress "$sourceISOFile" "$targetISOFile"
-		fi
-	else
-		sudo ionice -c 3 -t rsync -th --inplace --progress --bwlimit=16M "$sourceISOFile" "$targetISOFile"
-	fi
-done
-sudo chown -R root:root "$efiISODirectory" "$efiBinDirectory"
-sudo sync
-
-msg 'Preparing Arch partitions...'
-tempLUKSKeyFile1="$tempDir/luks1.key"
-tempLUKSKeyFile2="$tempDir/luks2.key"
-touch "$tempLUKSKeyFile1" "$tempLUKSKeyFile2"
-cleanup::tempLUKSKeyFiles() {
-	rm -f "$tempLUKSKeyFile1" "$tempLUKSKeyFile2"
-}
-cleanupTasks+=(cleanup::tempLUKSKeyFiles)
-chmod 600 "$tempLUKSKeyFile1" "$tempLUKSKeyFile2"
-if [ -z "$LUKS_KEYFILE" ]; then
-	cat <<EOF | tr -d '\n' > "$tempLUKSKeyFile1"
-$LUKS_PASSWORD
-EOF
-else
-	cat "$LUKS_KEYFILE" > "$tempLUKSKeyFile1"
-fi
-luksFormat() {
-	# Usage: luksFormat <UUID> <device>
-	sudo cryptsetup luksFormat --batch-mode --key-file="$tempLUKSKeyFile1" --use-random --cipher aes-xts-plain64 --key-size 512 --hash sha512 --iter-time 1000 --uuid="$1" "$2"
-	if [ -n "$LUKS_KEYFILE" -a -n "$LUKS_PASSWORD" ]; then
-		echo -n "$LUKS_PASSWORD" > "$tempLUKSKeyFile2"
-		sudo cryptsetup luksAddKey --batch-mode --key-file="$tempLUKSKeyFile1" --iter-time 5000 "$2" "$tempLUKSKeyFile2"
-	fi
-	refreshPartitions
-}
-ifInitial luksFormat "$archLUKSUUID" "$archPartition"
-ifInitial luksFormat "$homeLUKSUUID" "$homePartition"
-archLUKSDevice="/dev/disk/by-uuid/$archLUKSUUID"
-homeLUKSDevice="/dev/disk/by-uuid/$homeLUKSUUID"
-if [ ! -e "$archLUKSDevice" ]; then
-	msg "Cannot find arch device '$archLUKSDevice'."
-	cleanup 1
-fi
-if [ ! -e "$homeLUKSDevice" ]; then
-	msg "Cannot find home device '$homeLUKSDevice'."
-	cleanup 1
-fi
-cleanup::closeLUKS || true # Try cleanup from previous runs.
-cleanupTasks+=(cleanup::closeLUKS)
-sudo cryptsetup open --key-file="$tempLUKSKeyFile1" "$archPartition" travos-arch
-sudo cryptsetup open --key-file="$tempLUKSKeyFile1" "$homePartition" travos-home
-archMappedPartition='/dev/mapper/travos-arch'
-homeMappedPartition='/dev/mapper/travos-home'
-ifInitial sudo mkfs.ext4 -qFU "$archRealUUID" -O '^has_journal'      "$archMappedPartition" 2>/dev/null
-ifInitial sudo mkfs.ext4 -qFU "$homeRealUUID" -O '^has_journal' -m 0 "$homeMappedPartition" 2>/dev/null
-ifInitial refreshPartitions
-if [ "$reprovision" == 'true' ]; then
-	sudo fsck.ext4 -y "$archMappedPartition"
-	sudo fsck.ext4 -y "$homeMappedPartition"
-	refreshPartitions
-fi
-cleanup::unmountArchPartitions() {
-	sudo umount -l "$archMappedPartition" "$archMountpoint" 2>/dev/null || true
-	sudo umount -l "$homeMappedPartition" "$homeMountpoint" 2>/dev/null || true
-}
-cleanupTasks+=(cleanup::unmountArchPartitions)
-sudo mount "$archMappedPartition" "$archMountpoint"
-sudo mount "$homeMappedPartition" "$homeMountpoint"
-archBootstrapImage="$scratchDir/archlinux-bootstrap-${archVersion}-x86_64.tar.gz"
-ifInitial sudo ionice -c 3 -t bsdtar xzf "$archBootstrapImage" --same-owner --numeric-owner --xattrs --strip-components=1 -C "$archMountpoint/"
-
-# Bootstrap Arch.
-archChroot() {
-	if ! sudo "$archMountpoint/bin/arch-chroot" "$archMountpoint" "$@"; then
-		msg "Command failed inside chroot: $@"
+if [ "$reprovisionLocal" == 'false' ]; then
+	ifInitial msg 'Creating new partitions...'
+	ifInitial sudo sgdisk --zap-all "$device" 2> /dev/null
+	# Typecode EF02 is from https://www.gnu.org/software/grub/manual/html_node/BIOS-installation.html
+	ifInitial sudo sgdisk --clear                        \
+		--new='1:1M:2M'            --typecode=1:EF02 \
+		--new='2:4M:8G'            --typecode=2:EF00 \
+		--new="3:9G:$rootBoundary" --typecode=3:8300 \
+		--largest-new='4'          --typecode=4:8300 \
+		--hybrid='1,2,3'                             \
+		--attributes='1:set:2'                       \
+		"$device" 2>/dev/null
+	ifInitial refreshPartitions
+	ifInitial msg 'Creating filesystems...'
+	ifInitial sudo mkfs.vfat -i "$bootDOSID" "$bootDOSPartition" &>/dev/null
+	ifInitial sudo mkfs.vfat -i "$bootEFIID" "$bootEFIPartition" &>/dev/null
+	ifInitial refreshPartitions
+	bootEFIDevice="/dev/disk/by-uuid/$bootEFIUUID"
+	if [ ! -e "$bootEFIDevice" ]; then
+		msg "Cannot find boot EFI device '$bootEFIDevice'."
 		cleanup 1
 	fi
-}
-bootEFIMountpointWithinArch="$archMountpoint/boot-efi"
-travosDirWithinArch="$archMountpoint/travos"
-qemuEthernetMACAddress='00:75:a1:05:9e:80'
-qemuEthernetInterface='qemu0'
+	mountpointDir="$scratchDir/mnt"
+	bootEFIMountpoint="$mountpointDir/boot-efi"
+	archMountpoint="$mountpointDir/arch"
+	homeMountpoint="$mountpointDir/home"
+	mkdir -p "$bootEFIMountpoint" "$archMountpoint" "$homeMountpoint"
+	cleanup::unmountEFI() {
+		sudo umount -l "$bootEFIMountpoint" 2>/dev/null || true
+	}
+	cleanupTasks+=(cleanup::unmountEFI)
+
+	msg 'Preparing boot partitions...'
+	sudo mount "$bootEFIDevice" "$bootEFIMountpoint"
+	bootDirectory="$bootEFIMountpoint/boot"
+	efiISODirectory="$bootEFIMountpoint/isos"
+	efiBinDirectory="$bootEFIMountpoint/bin"
+	sudo mkdir -p "$bootDirectory" "$efiISODirectory" "$efiBinDirectory"
+	sudo chown root:root "$bootDirectory" "$efiISODirectory" "$efiBinDirectory"
+	ifInitial msg 'Installing GRUB for EFI...'
+	ifInitial sudo grub-install --target=x86_64-efi --efi-directory="$bootEFIMountpoint" --boot-directory="$bootDirectory" --removable --recheck
+	ifInitial msg 'Installing GRUB for legacy booting...'
+	ifInitial sudo grub-install --target=i386-pc --recheck --boot-directory="$bootDirectory" --removable "$device"
+	ifInitial refreshPartitions
+	if [ "$(cat /proc/sys/vm/dirty_background_bytes)" -eq 0 ]; then
+		# This can slow the system down a lot by dirtying pages, so apply saner values.
+		# See https://lwn.net/Articles/572911/
+		sudo bash -c 'echo $((16*1024*1024)) > /proc/sys/vm/dirty_background_bytes'
+		sudo bash -c 'echo $((48*1024*1024)) > /proc/sys/vm/dirty_bytes'
+	fi
+	msg 'Copying live Linux images...'
+	sudo ionice -c 3 -t rsync -rth --inplace --progress --bwlimit=16M "$scriptDir/boot"/* "$bootDirectory/"
+	cat "$scriptDir/boot/grub/grub.cfg" | sed -r "s/%UUID_OFFSET%/${uuidOffset}/g" | sed -r "s~%EXTRA_LINUX_BOOT_OPTIONS%~${EXTRA_LINUX_BOOT_OPTIONS}~g" | sudo tee "$bootDirectory/grub/grub.cfg" > /dev/null
+	for sourceISOFile in "$imagesDir"/*.iso; do
+		targetISOFile="$efiISODirectory/$(basename "$sourceISOFile")"
+		if [ -f "$targetISOFile" ]; then
+			if [ "$skipImageVerification" == 'true' ]; then
+				msg "Existing ISO '$(basename "$sourceISOFile")' detected, but image verification is off; assuming image is correct."
+			else
+				msg "Existing ISO '$(basename "$sourceISOFile")' detected, syncing..."
+				sudo ionice -c 3 -t rsync -cth --inplace --progress "$sourceISOFile" "$targetISOFile"
+			fi
+		else
+			sudo ionice -c 3 -t rsync -th --inplace --progress --bwlimit=16M "$sourceISOFile" "$targetISOFile"
+		fi
+	done
+	sudo chown -R root:root "$efiISODirectory" "$efiBinDirectory"
+	sudo sync
+
+	msg 'Preparing Arch partitions...'
+	tempLUKSKeyFile1="$tempDir/luks1.key"
+	tempLUKSKeyFile2="$tempDir/luks2.key"
+	touch "$tempLUKSKeyFile1" "$tempLUKSKeyFile2"
+	cleanup::tempLUKSKeyFiles() {
+		rm -f "$tempLUKSKeyFile1" "$tempLUKSKeyFile2"
+	}
+	cleanupTasks+=(cleanup::tempLUKSKeyFiles)
+	chmod 600 "$tempLUKSKeyFile1" "$tempLUKSKeyFile2"
+	if [ -z "$LUKS_KEYFILE" ]; then
+		cat <<EOF | tr -d '\n' > "$tempLUKSKeyFile1"
+$LUKS_PASSWORD
+EOF
+	else
+		cat "$LUKS_KEYFILE" > "$tempLUKSKeyFile1"
+	fi
+	luksFormat() {
+		# Usage: luksFormat <UUID> <device>
+		sudo cryptsetup luksFormat --batch-mode --key-file="$tempLUKSKeyFile1" --use-random --cipher aes-xts-plain64 --key-size 512 --hash sha512 --iter-time 1000 --uuid="$1" "$2"
+		if [ -n "$LUKS_KEYFILE" -a -n "$LUKS_PASSWORD" ]; then
+			echo -n "$LUKS_PASSWORD" > "$tempLUKSKeyFile2"
+			sudo cryptsetup luksAddKey --batch-mode --key-file="$tempLUKSKeyFile1" --iter-time 5000 "$2" "$tempLUKSKeyFile2"
+		fi
+		refreshPartitions
+	}
+	ifInitial luksFormat "$archLUKSUUID" "$archPartition"
+	ifInitial luksFormat "$homeLUKSUUID" "$homePartition"
+	archLUKSDevice="/dev/disk/by-uuid/$archLUKSUUID"
+	homeLUKSDevice="/dev/disk/by-uuid/$homeLUKSUUID"
+	if [ ! -e "$archLUKSDevice" ]; then
+		msg "Cannot find arch device '$archLUKSDevice'."
+		cleanup 1
+	fi
+	if [ ! -e "$homeLUKSDevice" ]; then
+		msg "Cannot find home device '$homeLUKSDevice'."
+		cleanup 1
+	fi
+	cleanup::closeLUKS || true # Try cleanup from previous runs.
+	cleanupTasks+=(cleanup::closeLUKS)
+	sudo cryptsetup open --key-file="$tempLUKSKeyFile1" "$archPartition" travos-arch
+	sudo cryptsetup open --key-file="$tempLUKSKeyFile1" "$homePartition" travos-home
+	archMappedPartition='/dev/mapper/travos-arch'
+	homeMappedPartition='/dev/mapper/travos-home'
+	ifInitial sudo mkfs.ext4 -qFU "$archRealUUID" -O '^has_journal'      "$archMappedPartition" 2>/dev/null
+	ifInitial sudo mkfs.ext4 -qFU "$homeRealUUID" -O '^has_journal' -m 0 "$homeMappedPartition" 2>/dev/null
+	ifInitial refreshPartitions
+	if [ "$reprovision" == 'true' ]; then
+		sudo fsck.ext4 -y "$archMappedPartition"
+		sudo fsck.ext4 -y "$homeMappedPartition"
+		refreshPartitions
+	fi
+	cleanup::unmountArchPartitions() {
+		sudo umount -l "$archMappedPartition" "$archMountpoint" 2>/dev/null || true
+		sudo umount -l "$homeMappedPartition" "$homeMountpoint" 2>/dev/null || true
+	}
+	cleanupTasks+=(cleanup::unmountArchPartitions)
+	sudo mount "$archMappedPartition" "$archMountpoint"
+	sudo mount "$homeMappedPartition" "$homeMountpoint"
+	archBootstrapImage="$scratchDir/archlinux-bootstrap-${archVersion}-x86_64.tar.gz"
+	ifInitial sudo ionice -c 3 -t bsdtar xzf "$archBootstrapImage" --same-owner --numeric-owner --xattrs --strip-components=1 -C "$archMountpoint/"
+
+	# Bootstrap Arch.
+	archChroot() {
+		if ! sudo "$archMountpoint/bin/arch-chroot" "$archMountpoint" "$@"; then
+			msg "Command failed inside chroot: $@"
+			cleanup 1
+		fi
+	}
+	bootEFIMountpointWithinArch="$archMountpoint/boot-efi"
+	travosDirWithinArch="$archMountpoint/travos"
+	qemuEthernetMACAddress='00:75:a1:05:9e:80'
+	qemuEthernetInterface='qemu0'
+	sudo mkdir -p "$bootEFIMountpointWithinArch" "$archMountpoint/boot" "$travosDirWithinArch"
+	sudo chmod 711 "$bootEFIMountpointWithinArch" "$archMountpoint/boot" "$travosDirWithinArch"
+	sudo touch "$travosDirWithinArch/luks.key"
+	sudo chmod 400 "$travosDirWithinArch/luks.key"
+	cat "$tempLUKSKeyFile1" | sudo tee "$travosDirWithinArch/luks.key" > /dev/null
+	cat "$PROVISIONING_PUBLIC_KEY" | sudo tee "$travosDirWithinArch/ssh_authorized_keys" > /dev/null
+	sudo chmod 644 "$travosDirWithinArch/ssh_authorized_keys"
+	cleanup::unmountArchBootPartitions() {
+		sudo umount -l "$archMountpoint/boot" 2>/dev/null || true
+		sudo umount -l "$bootEFIMountpointWithinArch" 2>/dev/null || true
+	}
+	cleanupTasks+=(cleanup::unmountArchBootPartitions)
+	sudo mount "$bootEFIDevice" "$bootEFIMountpointWithinArch"
+	sudo mount --bind "$bootEFIMountpointWithinArch/boot" "$archMountpoint/boot"
+fi
 travosProvisioningUser='travos-prov'
-sudo mkdir -p "$bootEFIMountpointWithinArch" "$archMountpoint/boot" "$travosDirWithinArch"
-sudo chmod 711 "$bootEFIMountpointWithinArch" "$archMountpoint/boot" "$travosDirWithinArch"
-sudo touch "$travosDirWithinArch/luks.key"
-sudo chmod 400 "$travosDirWithinArch/luks.key"
-cat "$tempLUKSKeyFile1" | sudo tee "$travosDirWithinArch/luks.key" > /dev/null
-cat "$PROVISIONING_PUBLIC_KEY" | sudo tee "$travosDirWithinArch/ssh_authorized_keys" > /dev/null
-sudo chmod 644 "$travosDirWithinArch/ssh_authorized_keys"
-cleanup::unmountArchBootPartitions() {
-	sudo umount -l "$archMountpoint/boot" 2>/dev/null || true
-	sudo umount -l "$bootEFIMountpointWithinArch" 2>/dev/null || true
-}
-cleanupTasks+=(cleanup::unmountArchBootPartitions)
-sudo mount "$bootEFIDevice" "$bootEFIMountpointWithinArch"
-sudo mount --bind "$bootEFIMountpointWithinArch/boot" "$archMountpoint/boot"
-if [ "$reprovision" == 'false' ]; then
+if [ "$reprovision" == 'false' -a "$reprovisionLocal" == 'false' ]; then
 	echo 'Server = http://mirrors.kernel.org/archlinux/$repo/os/$arch' | sudo tee "$archMountpoint/etc/pacman.d/mirrorlist" > /dev/null
 	echo 'LANG=en_US.UTF-8' | sudo tee "$archMountpoint/etc/locale.conf" > /dev/null
 	echo 'en_US.UTF-8 UTF-8' | sudo tee "$archMountpoint/etc/locale.gen" > /dev/null
@@ -671,7 +695,7 @@ if [ "$reprovision" == 'false' ]; then
 	sudo sed -ri 's/^HOOKS=.*$/HOOKS=(base systemd keyboard autodetect sd-vconsole modconf block sd-encrypt filesystems fsck)/' "$archMountpoint/etc/mkinitcpio.conf"
 	archChroot mkinitcpio -p linux
 	echo "$chosenHostname" | sudo tee "$archMountpoint/etc/hostname" > /dev/null
-	echo 'SUBSYSTEM=="net",'                              \
+	echo 'SUBSYSTEM=="net",'                          \
 		'ACTION=="add",'                              \
 		"ATTR{address}==\"$qemuEthernetMACAddress\"," \
 		"NAME=\"$qemuEthernetInterface\""             \
@@ -700,115 +724,17 @@ if [ "$reprovision" == 'false' ]; then
 fi
 
 msg 'Preparing Arch installation for provisioning...'
-archChroot systemctl enable "netctl-ifplugd@$qemuEthernetInterface"
-sudo cp "$resDir/travos-ssh-bootstrap.service" "$archMountpoint/etc/systemd/system/"
-sudo chmod 644 "$archMountpoint/etc/systemd/system/travos-ssh-bootstrap.service"
-sudo rm -f "$archMountpoint/var/lib/pacman/db.lck"
-cleanup::disableBootstrapService() {
-	archPartitionRemountedForBootstrap='false'
-	if [ ! -f "$archMountpoint/etc/systemd/system/multi-user.target.wants/travos-ssh-bootstrap.service" ]; then
-		sudo mount "$archMappedPartition" "$archMountpoint"
-		archPartitionRemountedForBootstrap='true'
-	fi
-	sudo rm -f "$archMountpoint/etc/systemd/system/multi-user.target.wants/travos-ssh-bootstrap.service" &> /dev/null
-	if [ "$archPartitionRemountedForBootstrap" == true ]; then
-		sudo umount -l "$archMountpoint"
-	fi
-}
-cleanupTasks+=(cleanup::disableBootstrapService)
-sudo ln -fs '/etc/systemd/system/travos-ssh-bootstrap.service' "$archMountpoint/etc/systemd/system/multi-user.target.wants/"
-
-# Unmount Arch partitions before we start up a VM against them.
-msg 'Committing disk changes...'
-sudo sync
-cleanup::unmountArchBootPartitions || true
-cleanup::unmountArchPartitions || true
-sudo sync
-
-archQEMUCommand=(
-	qemu-system-x86_64                                             \
-		-enable-kvm                                                \
-		-m 4G                                                      \
-		-vga std                                                   \
-		-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress"  \
-		-netdev user,id=mynet0,hostfwd=tcp::2244-:2244             \
-		-drive file="$device",cache=none,format=raw                \
-		-drive file="$archMappedPartition",cache=none,format=raw   \
-		-kernel "$bootDirectory/vmlinuz-linux"                     \
-		-initrd "$bootDirectory/initramfs-linux-fallback.img"      \
-		-append root="/dev/disk/by-uuid/$archRealUUID"
-)
-if [ "$isDebug" == 'true' ]; then
-	msg 'Launching Arch in QEMU...'
-	graphicOptions=''
-else
-	msg 'Launching Arch in background QEMU...'
-	graphicOptions='-nographic'
-fi
-touch "$tempDir/qemu.pid"
-cat <<EOF > "$tempDir/qemu-launch.sh"
-#!/usr/bin/env bash
-
-set -u
-set +x
-${archQEMUCommand[@]} $graphicOptions &
-echo "\$!" > "$tempDir/qemu.pid"
-sync
-wait
-EOF
-chmod +x "$tempDir/qemu-launch.sh"
-sudo --background "$tempDir/qemu-launch.sh" &> /dev/null
-archQEMUPID=''
-for i in $(seq 1 10); do
-	sleep 1
-	if [ "$(cat "$tempDir/qemu.pid" | wc -l)" -gt 0 ]; then
-		archQEMUPID="$(cat "$tempDir/qemu.pid")"
-		break
-	fi
-done
-if [ -z "$archQEMUPID" ]; then
-	msg 'Failed to start Arch in background QEMU.'
-	cleanup 1
-fi
-qemu::forceKillArch() {
-	sudo kill -9 "$archQEMUPID" &> /dev/null || true
-}
-cleanupTasks+=(qemu::forceKillArch)
-qemu::killAndWaitArch() {
-	sudo kill "$archQEMUPID" &> /dev/null || true
-	waitPID "$archQEMUPID"
-}
-qemuSSHArgs=(-i "$PROVISIONING_PRIVATE_KEY" -o ConnectTimeout=5 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no)
-qemu::sync() {
-	ssh -p 2244 "${qemuSSHArgs[@]}" "root@localhost" sync &> /dev/null
-}
-qemu::shutdown() {
-	qemu::sync
-	for i in $(seq 1 5); do
-		ssh -p 2244 "${qemuSSHArgs[@]}" "root@localhost" poweroff &> /dev/null || true
-	done
-	sleep 3
-	qemuTurnedOff='false'
-	for i in $(seq 1 10); do
-		if ! ssh -p 2244 "${qemuSSHArgs[@]}" "root@localhost" uptime &> /dev/null; then
-			qemuTurnedOff='true'
-			break
-		fi
-		sleep 3
-	done
-	if [ "$qemuTurnedOff" == 'false' ]; then
-		return 1
-	fi
-	waitPID "$archQEMUPID" || true
-	sleep 1
-	return 0
-}
-qemu::waitForSSH() {
+provisioningSSHArgs=(-i "$PROVISIONING_PRIVATE_KEY" -o ConnectTimeout=5 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no)
+waitForSSH() {
 	msg 'Waiting for Arch to come up...'
-	sleep 10
+	if [ "$reprovisionLocal" == 'true' ]; then
+		sleep 1
+	else
+		sleep 10
+	fi
 	archConnected='false'
 	for i in $(seq 1 10); do
-		if ssh -p 2244 "${qemuSSHArgs[@]}" "${travosProvisioningUser}@localhost" uptime &> /dev/null; then
+		if ssh -p 2244 "${provisioningSSHArgs[@]}" "${travosProvisioningUser}@localhost" uptime &> /dev/null; then
 			msg 'Connected to Arch.'
 			archConnected='true'
 			break
@@ -818,6 +744,114 @@ qemu::waitForSSH() {
 	done
 	if [ "$archConnected" == 'false' ]; then
 		msg 'Arch did not come up in time.'
+		return 1
+	fi
+	return 0
+}
+if [ "$reprovisionLocal" == 'false' ]; then
+	archChroot systemctl enable "netctl-ifplugd@$qemuEthernetInterface"
+	sudo cp "$resDir/travos-ssh-bootstrap.service" "$archMountpoint/etc/systemd/system/"
+	sudo chmod 644 "$archMountpoint/etc/systemd/system/travos-ssh-bootstrap.service"
+	sudo rm -f "$archMountpoint/var/lib/pacman/db.lck"
+	cleanup::disableBootstrapService() {
+		archPartitionRemountedForBootstrap='false'
+		if [ ! -f "$archMountpoint/etc/systemd/system/multi-user.target.wants/travos-ssh-bootstrap.service" ]; then
+			sudo mount "$archMappedPartition" "$archMountpoint"
+			archPartitionRemountedForBootstrap='true'
+		fi
+		sudo rm -f "$archMountpoint/etc/systemd/system/multi-user.target.wants/travos-ssh-bootstrap.service" &> /dev/null
+		if [ "$archPartitionRemountedForBootstrap" == true ]; then
+			sudo umount -l "$archMountpoint"
+		fi
+	}
+	cleanupTasks+=(cleanup::disableBootstrapService)
+	sudo ln -fs '/etc/systemd/system/travos-ssh-bootstrap.service' "$archMountpoint/etc/systemd/system/multi-user.target.wants/"
+
+	# Unmount Arch partitions before we start up a VM against them.
+	msg 'Committing disk changes...'
+	sudo sync
+	cleanup::unmountArchBootPartitions || true
+	cleanup::unmountArchPartitions || true
+	sudo sync
+
+	archQEMUCommand=(
+		qemu-system-x86_64                                             \
+			-enable-kvm                                                \
+			-m 4G                                                      \
+			-vga std                                                   \
+			-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress"  \
+			-netdev user,id=mynet0,hostfwd=tcp::2244-:2244             \
+			-drive file="$device",cache=none,format=raw                \
+			-drive file="$archMappedPartition",cache=none,format=raw   \
+			-kernel "$bootDirectory/vmlinuz-linux"                     \
+			-initrd "$bootDirectory/initramfs-linux-fallback.img"      \
+			-append root="/dev/disk/by-uuid/$archRealUUID"
+	)
+	if [ "$isDebug" == 'true' ]; then
+		msg 'Launching Arch in QEMU...'
+		graphicOptions=''
+	else
+		msg 'Launching Arch in background QEMU...'
+		graphicOptions='-nographic'
+	fi
+	touch "$tempDir/qemu.pid"
+	cat <<EOF > "$tempDir/qemu-launch.sh"
+#!/usr/bin/env bash
+
+set -u
+set +x
+${archQEMUCommand[@]} $graphicOptions &
+echo "\$!" > "$tempDir/qemu.pid"
+sync
+wait
+EOF
+	chmod +x "$tempDir/qemu-launch.sh"
+	sudo --background "$tempDir/qemu-launch.sh" &> /dev/null
+	archQEMUPID=''
+	for i in $(seq 1 10); do
+		sleep 1
+		if [ "$(cat "$tempDir/qemu.pid" | wc -l)" -gt 0 ]; then
+			archQEMUPID="$(cat "$tempDir/qemu.pid")"
+			break
+		fi
+	done
+	if [ -z "$archQEMUPID" ]; then
+		msg 'Failed to start Arch in background QEMU.'
+		cleanup 1
+	fi
+	qemu::forceKillArch() {
+		sudo kill -9 "$archQEMUPID" &> /dev/null || true
+	}
+	cleanupTasks+=(qemu::forceKillArch)
+	qemu::killAndWaitArch() {
+		sudo kill "$archQEMUPID" &> /dev/null || true
+		waitPID "$archQEMUPID"
+	}
+	qemu::sync() {
+		ssh -p 2244 "${provisioningSSHArgs[@]}" "root@localhost" sync &> /dev/null
+	}
+	qemu::shutdown() {
+		qemu::sync
+		for i in $(seq 1 5); do
+			ssh -p 2244 "${provisioningSSHArgs[@]}" "root@localhost" poweroff &> /dev/null || true
+		done
+		sleep 3
+		qemuTurnedOff='false'
+		for i in $(seq 1 10); do
+			if ! ssh -p 2244 "${provisioningSSHArgs[@]}" "root@localhost" uptime &> /dev/null; then
+				qemuTurnedOff='true'
+				break
+			fi
+			sleep 3
+		done
+		if [ "$qemuTurnedOff" == 'false' ]; then
+			return 1
+		fi
+		waitPID "$archQEMUPID" || true
+		sleep 1
+		return 0
+	}
+	if ! waitForSSH; then
 		if [ "$isDebug" == 'true' ]; then
 			qemu::killAndWaitArch || true
 			msg 'Spawning Arch again with visible display (for debugging)...'
@@ -825,7 +859,16 @@ qemu::waitForSSH() {
 		fi
 		cleanup 1
 	fi
-}
+else
+	sudo cp "$resDir/travos-ssh-bootstrap.service" /etc/systemd/system/
+	sudo systemctl daemon-reload
+	sudo systemctl start travos-ssh-bootstrap.service
+	if ! waitForSSH; then
+		msg 'Cannot connect to local SSH bootstrap service.'
+		cleanup 1
+	fi
+fi
+
 cat <<EOF > "$tempDir/ansible.cfg"
 [defaults]
 inventory = ansible-inventory.ini
@@ -834,7 +877,7 @@ roles_path = $ansibleRolesPath
 action_plugins = $ansibleActionPlugins
 
 [ssh_connection]
-ssh_args = ${qemuSSHArgs[@]}
+ssh_args = ${provisioningSSHArgs[@]}
 EOF
 cat <<EOF > "$tempDir/ansible-inventory.ini"
 [all]
@@ -844,7 +887,6 @@ cat <<EOF > "$tempDir/playbook.yml"
 - hosts: [all]
   roles: [${ansibleRoles}]
 EOF
-qemu::waitForSSH
 cleanup::sync() {
 	sudo sync
 }
@@ -879,26 +921,28 @@ pushd "$tempDir" &> /dev/null
 	done
 popd &> /dev/null
 
-msg 'Stopping Arch VM...'
-cleanup::disableBootstrapService
-qemu::sync
-sudo sync
-qemu::shutdown
+if [ "$reprovisionLocal" == 'false' ]; then
+	msg 'Stopping Arch VM...'
+	cleanup::disableBootstrapService
+	qemu::sync
+	sudo sync
+	qemu::shutdown
 
-if [ "$isTest" == 'true' ]; then
-	if [ "$isTestUnlocked" == true ]; then
-		msg 'Launching QEMU... (unlocked)'
-		sudo "${archQEMUCommand[@]}" 2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
-	else
-		msg 'Launching QEMU...'
-		sudo qemu-system-x86_64                                           \
-			-enable-kvm                                               \
-			-m 4G                                                     \
-			-vga std                                                  \
-			-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress" \
-			-netdev user,id=mynet0                                    \
-			-drive file="$device",cache=none,format=raw               \
-			2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
+	if [ "$isTest" == 'true' ]; then
+		if [ "$isTestUnlocked" == true ]; then
+			msg 'Launching QEMU... (unlocked)'
+			sudo "${archQEMUCommand[@]}" 2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
+		else
+			msg 'Launching QEMU...'
+			sudo qemu-system-x86_64                                       \
+				-enable-kvm                                               \
+				-m 4G                                                     \
+				-vga std                                                  \
+				-device e1000,netdev=mynet0,mac="$qemuEthernetMACAddress" \
+				-netdev user,id=mynet0                                    \
+				-drive file="$device",cache=none,format=raw               \
+				2>&1 | (grep --line-buffered -vP '^$|Gtk-WARNING' || cat)
+		fi
 	fi
 fi
 
