@@ -343,26 +343,34 @@ cleanup::recursiveCatchAllUnmount || true
 msg 'Fetching image files...'
 imagesDir="$scratchDir/images"
 mkdir -p "$imagesDir"
-archVersion='2018.10.01'
-kaliVersion='2018.3a'
-tailsVersion='3.10.1'
-systemRescueCDVersion='5.3.1'
+archVersion='2020.11.01'
+kaliVersion='2020.3'
+tailsVersion='4.12'
+systemRescueCDVersion='7.00'
 # Syntax: 'URL|TARGET_DIRECTORY|VERIFICATION_FUNCTION|VERIFICATION_FUNCTION_ARGUMENTS'
 # VERIFICATION_FUNCTION will be called with arguments <downloaded file> <VERIFICATION_FUNCTION_ARGUMENTS>
 images=(
 	# Arch: https://mirrors.kernel.org/archlinux/iso/ (bootstrap image)
 	"https://mirrors.kernel.org/archlinux/iso/${archVersion}/archlinux-bootstrap-${archVersion}-x86_64.tar.gz|${scratchDir}|verify::gpg_detached|https://mirrors.kernel.org/archlinux/iso/${archVersion}/archlinux-bootstrap-${archVersion}-x86_64.tar.gz.sig|${resDir}/archlinux-key.pgp"
 	# Kali Linux: https://www.kali.org/downloads/
-	"http://cdimage.kali.org/kali-${kaliVersion}/kali-linux-kde-${kaliVersion}-amd64.iso|${imagesDir}|verify::sha256|7fad2a1058f881d6ed37f5da05c4bab95852abfdb526ea86346e21eb7c7ac629"
+	"http://cdimage.kali.org/kali-${kaliVersion}/kali-linux-${kaliVersion}-live-amd64.iso|${imagesDir}|verify::sha256|1a0b2ea83f48861dd3f3babd5a2892a14b30a7234c8c9b5013a6507d1401874f"
 	# Tails: https://tails.boum.org/install/download/index.en.html
-	"https://mirrors.wikimedia.org/tails/stable/tails-amd64-${tailsVersion}/tails-amd64-${tailsVersion}.iso|${imagesDir}|verify::gpg_detached|https://tails.boum.org/torrents/files/tails-amd64-${tailsVersion}.iso.sig|https://tails.boum.org/tails-signing.key"
+	"http://dl.amnesia.boum.org/tails/stable/tails-amd64-${tailsVersion}/tails-amd64-${tailsVersion}.img|${imagesDir}|verify::gpg_detached|https://tails.boum.org/torrents/files/tails-amd64-${tailsVersion}.img.sig|https://tails.boum.org/tails-signing.key"
 	# System Rescue CD: http://www.system-rescue-cd.org/Download/
-	"https://downloads.sourceforge.net/project/systemrescuecd/sysresccd-x86/${systemRescueCDVersion}/systemrescuecd-x86-${systemRescueCDVersion}.iso|${imagesDir}|verify::sha256|ee4d1f2b9c15350cac6a098366809ba0b6573fa5d3c28874ad5ca28559f4a32d"
+	"https://osdn.net/frs/redir.php?f=%2Fstorage%2Fg%2Fs%2Fsy%2Fsystemrescuecd%2Freleases%2F${systemRescueCDVersion}%2Fsystemrescue-${systemRescueCDVersion}-amd64.iso|${imagesDir}|verify::sha512|6a529d02e426ff6bb1905e47caf64d5db60fb90ce32bdedec794c4795346fe7481feb0a5839a32ebc482ab8610b7993b1c73382b677a0da7ecfca79c175ee2bf"
 )
 
 verify::sha256() {
 	# Usage: verify::sha256 <file> <sha256>
 	if [ "$(sha256sum "$1" | cut -d' ' -f1)" == "$2" ]; then
+		return 0
+	fi
+	return 1
+}
+
+verify::sha512() {
+	# Usage: verify::sha512 <file> <sha512>
+	if [ "$(sha512sum "$1" | cut -d' ' -f1)" == "$2" ]; then
 		return 0
 	fi
 	return 1
